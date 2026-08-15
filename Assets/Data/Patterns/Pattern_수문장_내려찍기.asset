@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce8af6da2755e4a45a00a9e9f024baa3, type: 3}
+  m_Name: "Pattern_\uC218\uBB38\uC7A5_\uB0B4\uB824\uCC0D\uAE30"
+  m_EditorClassIdentifier: Assembly-CSharp::ActionPatternData
+  patternName: "\uB0B4\uB824\uCC0D\uAE30"
+  description: "\uC804\uC5F4\uC744 \uD55C\uAEBC\uBC88\uC5D0 \uB0B4\uB824\uCC0D\uB294\uB2E4."
+  icon: {fileID: 0}
+  timing: 50
+  cooldown: 2
+  initialCooldown: 0
+  maxUsesPerCombat: 0
+  priority: 10
+  hpBelowRatio: 0
+  minPhase: 2
+  requirePanic: 0
+  casterSlots: 0
+  targetMode: 0
+  targetSlots: 3
+  targetAlly: 0
+  isAoe: 1
+  maxTargets: 1
+  respectTaunt: 1
+  includeKnockedOut: 0
+  effects:
+  - type: 0
+    value: 0
+    status: 0
+    duration: 0
+  selfDestructAfterUse: 0

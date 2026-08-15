@@ -25,6 +25,9 @@ MonoBehaviour:
   panicTurnThreshold: 25
   phaseThresholds:
   - 0.5
+  patterns:
+  - {fileID: 11400000, guid: 37b630792bcaec844bcfcf85e362b169, type: 2}
+  - {fileID: 11400000, guid: 2669430c5cc0eca41a10b6e5e772728f, type: 2}
   minionPool:
   - {fileID: 11400000, guid: 97f83c1f306d8124797dd477668942a0, type: 2}
   - {fileID: 11400000, guid: 387d4a295be97f44794e262457a3eaca, type: 2}

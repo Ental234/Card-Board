@@ -25,6 +25,11 @@ MonoBehaviour:
   phaseThresholds:
   - 0.6
   - 0.3
+  patterns:
+  - {fileID: 11400000, guid: 1288aba8f497dac4e9c9a62bcb7d5c51, type: 2}
+  - {fileID: 11400000, guid: 554871f30a8689344965545d40121526, type: 2}
+  - {fileID: 11400000, guid: 39dbdec9a9125de4e973d5177d3828ca, type: 2}
+  - {fileID: 11400000, guid: 8485f3a67a63a174eb236af8f635cafc, type: 2}
   minionPool:
   - {fileID: 11400000, guid: d3b24d0793e66304e9e0ce4c54b01a89, type: 2}
   - {fileID: 11400000, guid: 520ae077f084be5479050e913e8e8cb2, type: 2}
