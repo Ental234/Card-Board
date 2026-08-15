@@ -10,16 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d1ed380c592d2a647a3ee382943c40f3, type: 3}
-  m_Name: "Minion_\uD574\uACE8\uBCD1\uC0AC"
+  m_Name: "Minion_\uD3ED\uBC1C\uC2AC\uB77C\uC784"
   m_EditorClassIdentifier: Assembly-CSharp::MinionData
-  minionName: "\uD574\uACE8 \uBCD1\uC0AC"
+  minionName: "\uD3ED\uBC1C \uC2AC\uB77C\uC784"
   portrait: {fileID: 0}
-  maxHp: 16
-  baseAttack: 5
-  preferredSlot: 1
+  maxHp: 6
+  baseAttack: 3
+  preferredSlot: 2
   isImmobile: 0
   patterns:
-  - {fileID: 11400000, guid: 6be7ae16ac50ddf4794f4bea6f6aeccd, type: 2}
-  reviveCount: 1
+  - {fileID: 11400000, guid: e4fdd71a224ec2141a90c17e0df1be1c, type: 2}
+  reviveCount: 0
   reviveHpPercent: 0.5
   startsWithTaunt: 0

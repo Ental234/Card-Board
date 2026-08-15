@@ -17,3 +17,9 @@ MonoBehaviour:
   maxHp: 10
   baseAttack: 6
   preferredSlot: 4
+  isImmobile: 0
+  patterns:
+  - {fileID: 11400000, guid: b9d24c2a8f5a54e48aeb3dabb7cdf07c, type: 2}
+  reviveCount: 0
+  reviveHpPercent: 0.5
+  startsWithTaunt: 0

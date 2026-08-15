@@ -18,5 +18,8 @@ MonoBehaviour:
   maxHp: 18
   baseAttack: 5
   preferredSlot: 4
+  isImmobile: 0
+  patterns:
+  - {fileID: 11400000, guid: 460588afc07a90b4ba78aea2225f634d, type: 2}
   combatCards:
   - {fileID: 11400000, guid: 8ccea62b965c0cf4f8434fa48a66a8a0, type: 2}

@@ -126,7 +126,14 @@ public class CombatManager : MonoBehaviour
     private IEnumerator PlayerTurn()
     {
         player.OnTurnStart();  // 방어막·상태이상·행동력·에너지·드로우 포함
-        foreach (var c in companions) c.OnTurnStart();
+
+        foreach (var c in companions)
+        {
+            c.OnTurnStart();
+            // 쓰러진 동료는 쿨다운도 돌지 않는다 — 쓰러져 있는 사이에 스킬이 준비되면 이상하다
+            if (c.IsActive) c.TickPatternCooldowns();
+        }
+
         RelicManager.Instance?.TriggerPlayerRelics(RelicTrigger.OnCombatTurnStart);
 
         // 렐릭 뒤에 둔다 — 순서가 반대면 렐릭이 건 버프가 동료 행동에 한 턴 늦게 반영된다
@@ -223,6 +230,10 @@ public class CombatManager : MonoBehaviour
         {
             enemy.ClearIntent();
 
+            // 쿨다운은 이 판정 '직전'에 깎는다. 적의 OnTurnStart는 이보다 늦게 오므로
+            // 거기서 깎으면 적만 한 라운드씩 더 쉬게 된다.
+            enemy.TickPatternCooldowns();
+
             if (!enemy.CanAct) continue;  // 기절·쓰러짐이면 예고 자체가 없다
 
             var candidates = new List<ActionPatternData>();
@@ -300,12 +311,17 @@ public class CombatManager : MonoBehaviour
 
         if (pattern == null)
         {
-            // 패턴 에셋이 붙지 않은 적을 위한 코드 폴백.
-            // 기존 동작을 그대로 둔다 — 여기서 도발을 반영하면 지금 밸런스가 조용히 바뀐다.
-            // 도발을 존중하는 기본 공격이 필요하면 Nearest 패턴 에셋을 만들어 붙이면 된다.
-            var target = GetFrontmostPlayerEntity();
-            if (target != null)
-                target.TakeDamage(enemy.CalculateAttack(enemy.Stats.BaseAttack));
+            // 폴백은 '패턴 에셋이 하나도 붙지 않은 적'만을 위한 것이다.
+            // 패턴은 있는데 전부 쿨다운·조건 미충족이라 예고가 없는 적은 그냥 쉰다 —
+            // 여기서 폴백을 태우면 자폭을 기다리는 유닛이 그 사이에 평타를 때린다.
+            if (enemy.Patterns.Count == 0)
+            {
+                // 기존 동작을 그대로 둔다 — 여기서 도발을 반영하면 지금 밸런스가 조용히 바뀐다.
+                // 도발을 존중하는 기본 공격이 필요하면 Nearest 패턴 에셋을 붙이면 된다.
+                var target = GetFrontmostPlayerEntity();
+                if (target != null)
+                    target.TakeDamage(enemy.CalculateAttack(enemy.Stats.BaseAttack));
+            }
 
             yield return null;
             yield break;

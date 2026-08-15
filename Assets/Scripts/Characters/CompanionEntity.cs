@@ -65,9 +65,7 @@ public class CompanionEntity : CombatEntity
 
     public override void OnTurnStart()
     {
-        // 쓰러진 동안은 base를 타지 않으므로 패턴 쿨다운도 돌지 않는다.
-        // 의도한 동작이다 — 쓰러져 있는 사이에 스킬이 저절로 준비되면 이상하다.
-        if (IsKnockedOutThisCombat) return;
+        if (IsKnockedOutThisCombat) return;  // 쓰러진 동안 행동 불가
         base.OnTurnStart();
     }
 

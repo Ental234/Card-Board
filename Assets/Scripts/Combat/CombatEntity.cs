@@ -137,7 +137,11 @@ public class CombatEntity : MonoBehaviour
         if (s.usesLeft != int.MaxValue) s.usesLeft--;
     }
 
-    // 자기 턴 시작마다 1씩 감소 (동료는 플레이어 턴, 적은 자기 턴 기준)
+    // 라운드마다 1씩 감소.
+    //
+    // OnTurnStart에 두면 안 된다 — 적의 인텐트는 라운드 시작(플레이어 턴 전)에 정해지는데
+    // 적의 OnTurnStart는 그보다 늦게 오므로, 쿨다운이 판정보다 한 박자 늦어 적만 한 라운드씩
+    // 더 쉬게 된다. 그래서 CombatManager가 "그 쿨다운을 실제로 보는 시점" 직전에 직접 호출한다.
     public void TickPatternCooldowns()
     {
         foreach (var s in patternStates.Values)
@@ -162,7 +166,6 @@ public class CombatEntity : MonoBehaviour
         stats.ClearShield();
         stats.ProcessStatusEffects();
         stats.RestoreActionPoints();
-        TickPatternCooldowns();
     }
 
     public virtual void OnTurnEnd() { }

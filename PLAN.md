@@ -84,17 +84,19 @@
 > 지금 단계. 뼈대를 채우는 구간.
 
 ### 중요도 1
-- [ ] **동료 자동 행동 (B안)** ← 진행 예정
-  Monster Train / Wildfrost 모델. 동료는 카드를 손패에 보태지 않고 **배치만 하면 자기 턴에 자동 행동**.
-  · GDD "동료 카드가 손패에 합산" 항목 **폐기**, `CompanionData.combatCards` 용도 변경
-  · 행동 패턴을 ScriptableObject로 정의 (타겟 규칙 · 효과 · 사용 슬롯 · 우선순위 · 쿨다운)
-- [ ] **적 AI를 같은 패턴 시스템으로 교체**
-  현재 `CombatManager.EnemyAct`는 "최전방 때리기" 하드코딩 하나뿐.
-  동료와 구조를 공유하면 적 다양성이 함께 풀린다
-- [ ] **적 다양성** — GDD 7장: 광역공격 · 도발 · 후열 저격 · 부활 · 자폭.
-  `MinionData`에 해당 필드가 아예 없음
-- [ ] **적 의도(인텐트) 시스템** — GDD 13장에 "의도 표시: 있음"인데 미구현.
-  다음 턴을 읽고 포지션으로 대비하는 게 이 전투의 핵심이라 없으면 4슬롯이 무의미
+- [x] **동료 자동 행동 (B안)** — 완료 (실플레이 검증)
+  `ActionPatternData`(SO)가 "언제(`TriggerTiming`) + 누구를(`TargetMode`) + 무엇을(기존 `CardEffect`)"를 담는다.
+  동료·적이 같은 실행 엔진을 쓰고 차이는 호출 지점에만 있다.
+  · GDD "동료 카드가 손패에 합산" 항목 **폐기 완료**. `CompanionData.combatCards`는 사용처 0건이라 남겨만 둠
+  · 코스트 없음, 슬롯 번호 순 발동, 쿨다운·사용횟수는 전투마다 초기화(HP는 유지)
+- [x] **적 AI를 같은 패턴 시스템으로 교체** — 완료.
+  패턴이 없는 적은 기존 "최전방 때리기"로 폴백해 회귀가 없다
+- [x] **적 다양성** — 광역 · 도발 · 후열 저격 · 부활 · 자폭 전부 구현·검증.
+  하수인 5종에 패턴 연결, `Minion_폭발슬라임` 신규
+- [~] **적 의도(인텐트) 시스템** — **구조 완료, 화면 표시만 남음**.
+  패턴을 라운드 시작에 미리 정해 `CombatEntity.CurrentIntent`에 보관하고,
+  타겟은 실행 순간에 재계산한다 → 슬롯 이동으로 회피가 성립 (검증 완료).
+  `CombatManager.OnIntentDecided` / `OnIntentExecuted` 이벤트에 UI만 붙이면 된다
 - [ ] **보드 페이즈 편성창**
   현재 `TryAddCompanion`이 영입 순서대로 빈 슬롯에 꽂을 뿐이라 `CompanionData.preferredSlot`이 미사용.
   `CombatManager.PlaceAllEntities`가 `entity.CurrentSlot`을 읽으므로 편성창은 그 값만 바꾸면 됨
@@ -114,7 +116,10 @@
   `Rarity { Common, Uncommon, Rare, Unique }` + 가중 추첨 + 등급별 가격.
   현재 상점·보상이 완전 무작위라 `타격`과 `강타`가 동일 확률.
   주의: 카드 테두리가 이미 직업색이라 등급까지 표현하려면 표기를 분리해야 함
-- [ ] **보스 페이즈 패턴** — `BossEntity.CurrentPhase` / `IsPanicMode`를 전투 AI가 미사용
+- [~] **보스 페이즈 패턴** — 구조 완료, **에셋만 미작성**.
+  패턴 SO의 `minPhase` / `requirePanic` / `hpBelowRatio`로 조건을 걸 수 있고
+  `CombatManager.MeetsCondition`이 `CurrentPhase` / `IsPanicMode`를 읽는다.
+  보스 3종의 `patterns`가 비어 있어 현재는 폴백(최전방 1타)으로 동작한다
 
 ### 중요도 3
 - [ ] 슬롯 설치 아이템 (GDD 7장 — 빈 슬롯에 설치해 패시브 획득). `isImmobile` 기반으로 구현 가능
@@ -132,7 +137,10 @@
 > 시스템 구현 시 짝으로 만든다. 단독으로 앞서 만들지 않는다.
 
 ### 중요도 1
-- [ ] **적 의도 표시** — 시스템과 세트
+- [ ] **적 의도 표시** — 시스템은 완료됨. `SlotUI.prefab`에 배지(아이콘+수치) 자식을 추가하고
+  `CombatSlotGridUI`가 `CombatManager.OnIntentDecided` / `OnIntentExecuted`를 구독하면 된다.
+  표시할 값은 `EnemyIntent.previewSlots` / `previewValue` / `isAttack`
+  (※ 이 값들은 표시 전용 스냅샷이다. 실행 로직이 읽으면 슬롯 이동 회피가 깨진다)
 - [ ] **상태이상 표시** — `SlotUI`가 HP·방어막만 표시. 출혈/독/도발/취약이 화면에 안 보임
 - [ ] **편성창 UI** — 시스템과 세트
 
