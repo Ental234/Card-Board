@@ -145,6 +145,11 @@ public class CombatManager : MonoBehaviour
         // 렐릭 뒤에 둔다 — 순서가 반대면 렐릭이 건 버프가 동료 행동에 한 턴 늦게 반영된다
         yield return StartCoroutine(RunCompanionPatterns(TriggerTiming.TurnStart));
 
+        // 턴 시작에 벌어진 일이 예상 피해를 바꾼다 —
+        // 취약이 만료되거나, 동료 패턴이 적에게 약화를 걸거나, 상태이상 피해로 누가 쓰러지거나.
+        // 플레이어가 판단을 시작하기 직전에 한 번 맞춰둔다.
+        RefreshIntentPreviews();
+
         OnEntityTurnBegin?.Invoke(player);
         playerTurnActive = true;
 

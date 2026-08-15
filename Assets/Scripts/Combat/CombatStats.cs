@@ -195,6 +195,10 @@ public class CombatStats
     public int GetStatusStacks(StatusEffect status) =>
         stacks.TryGetValue(status, out int v) ? v : 0;
 
+    // 남은 지속 턴 — 기절·도발·약화·취약처럼 스택이 무의미한 상태에 표시할 값
+    public int GetStatusDuration(StatusEffect status) =>
+        duration.TryGetValue(status, out int v) ? v : 0;
+
     // 턴 시작 시 CombatManager가 호출
     // 상태이상 피해 적용 → 지속 턴 감소 → 만료 제거
     public void ProcessStatusEffects()
@@ -222,8 +226,12 @@ public class CombatStats
             }
 
             duration[status]--;
+
             if (duration[status] <= 0 || stacks[status] <= 0)
                 expired.Add(status);
+            else
+                // 독처럼 스택이 줄거나 지속 턴이 깎인 것도 알려야 화면 숫자가 낡지 않는다
+                OnStatusChanged?.Invoke(status, stacks[status]);
         }
 
         foreach (StatusEffect s in expired)

@@ -50,8 +50,15 @@ public class CombatSlotGridUI : MonoBehaviour
     private readonly List<GameObject> moveArrows   = new();
     private readonly List<GameObject> intentLabels = new();
 
-    // 이동 화살표에 마우스를 올린 동안의 예상 피해 (인덱스 0 = 슬롯 1). null이면 미리보기 아님
+    // 이동 화살표에 마우스를 올린 동안의 예상 피해 (인덱스 0 = 슬롯 1)
+    //
+    // ※ "null이면 미리보기 아님"으로 판단하면 안 된다.
+    //   Unity 직렬화는 null 배열을 빈 배열로 되살려서, 어셈블리 리로드를 거치면
+    //   null 대신 int[0]이 들어온다 — 조건은 통과하는데 인덱스에서 터진다.
+    //   그래서 길이까지 확인한다.
     private int[] movePreview;
+
+    private bool HasMovePreview => movePreview != null && movePreview.Length == 4;
 
     private void Awake()
     {
@@ -300,7 +307,7 @@ public class CombatSlotGridUI : MonoBehaviour
             // 화면에 뜨는 숫자는 항상 '실제로 들어올 피해'다 (취약 배수 포함).
             // 미리보기 중이면 옮긴 뒤의 값으로 바꿔 보여주고, 좋아졌는지 나빠졌는지 색으로 구분한다.
             int current   = combatManager.GetIncomingDamage(i + 1);
-            int displayed = movePreview != null ? movePreview[i] : current;
+            int displayed = HasMovePreview ? movePreview[i] : current;
 
             if (displayed <= 0) continue;
 
@@ -308,7 +315,7 @@ public class CombatSlotGridUI : MonoBehaviour
             Color background = new(0.16f, 0.04f, 0.06f, 0.95f);
             Color textColor  = new(1f, 0.72f, 0.30f);
 
-            if (movePreview != null)
+            if (HasMovePreview)
             {
                 if (displayed < current)      textColor = new Color(0.45f, 0.95f, 0.45f);  // 줄어든다
                 else if (displayed > current) textColor = new Color(1f, 0.40f, 0.35f);     // 늘어난다
@@ -330,7 +337,7 @@ public class CombatSlotGridUI : MonoBehaviour
 
     private void ClearMovePreview()
     {
-        if (movePreview == null) return;
+        if (!HasMovePreview) { movePreview = null; return; }
 
         movePreview = null;
         RedrawIntents();

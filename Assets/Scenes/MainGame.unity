@@ -9933,6 +9933,10 @@ MonoBehaviour:
   arrowLength: 44
   arrowThickness: 12
   arrowHeadSize: 20
+  intentOffsetY: 96
+  intentSize: {x: 56, y: 32}
+  threatSize: {x: 48, y: 32}
+  labelFontSize: 16
 --- !u!1 &2089537301
 GameObject:
   m_ObjectHideFlags: 0
