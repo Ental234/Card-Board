@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1f6a8451605e7047ab864033cc69d51, type: 3}
+  m_Name: "Stage_\uB9C8\uC655\uC758\uC131"
+  m_EditorClassIdentifier: Assembly-CSharp::BoardStageData
+  stageName: "\uB9C8\uC655\uC758 \uC131"
+  totalNodes: 28
+  monsterRatio: 0.3
+  eliteRatio: 0.18
+  eventRatio: 0.15
+  shopRatio: 0.06
+  restRatio: 0.08
+  treasureRatio: 0.12
+  curseRatio: 0.08
+  salaryRatio: 0.03
+  bossStartNode: 14
+  maxConsecutiveSameType: 2

@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 135cf0a0aad0dde468a68dc99875915d, type: 3}
+  m_Name: "Boss_\uB9C8\uC655"
+  m_EditorClassIdentifier: Assembly-CSharp::BossData
+  bossName: "\uB9C8\uC655"
+  portrait: {fileID: 0}
+  description: "\uBAA8\uB4E0 \uC545\uC758 \uADFC\uC6D0. \uCD5C\uD6C4\uC758 \uC801."
+  maxHp: 320
+  baseAttack: 16
+  bossSlot: 4
+  maxActionPoints: 0
+  baseMoveDistance: 3
+  panicHpThreshold: 0.4
+  panicTurnThreshold: 18
+  phaseThresholds:
+  - 0.6
+  - 0.3
+  minionPool:
+  - {fileID: 11400000, guid: d3b24d0793e66304e9e0ce4c54b01a89, type: 2}
+  - {fileID: 11400000, guid: 520ae077f084be5479050e913e8e8cb2, type: 2}
+  - {fileID: 11400000, guid: f447ccbcd1f976741bc4fa875b81e1ff, type: 2}
+  - {fileID: 11400000, guid: 387d4a295be97f44794e262457a3eaca, type: 2}

@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3fd07ef02c5fdd49a0eb65d7a086670, type: 3}
+  m_Name: Character_Warrior
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterData
+  characterName: "\uC804\uC0AC"
+  classTag: 0
+  portrait: {fileID: 0}
+  description: "\uC804\uBC29\uC5D0\uC11C \uC2F8\uC6B0\uB294 \uADFC\uC811 \uC804\uD22C
+    \uC804\uBB38\uAC00. \uBC29\uC5B4\uB9C9\uACFC \uB3C4\uBC1C\uB85C \uC544\uAD70\uC744
+    \uC9C0\uD0A8\uB2E4."
+  maxHp: 80
+  baseAttack: 0
+  initialSlot: 1
+  maxActionPoints: 2
+  startingCombatCards:
+  - {fileID: 11400000, guid: 8ccea62b965c0cf4f8434fa48a66a8a0, type: 2}
+  - {fileID: 11400000, guid: 8ccea62b965c0cf4f8434fa48a66a8a0, type: 2}
+  - {fileID: 11400000, guid: 8ccea62b965c0cf4f8434fa48a66a8a0, type: 2}
+  - {fileID: 11400000, guid: 8ccea62b965c0cf4f8434fa48a66a8a0, type: 2}
+  - {fileID: 11400000, guid: 8b973c122d2468848b27be0de372cc99, type: 2}
+  - {fileID: 11400000, guid: 8b973c122d2468848b27be0de372cc99, type: 2}
+  - {fileID: 11400000, guid: 8b973c122d2468848b27be0de372cc99, type: 2}
+  - {fileID: 11400000, guid: 8b973c122d2468848b27be0de372cc99, type: 2}
+  - {fileID: 11400000, guid: d634130db4435a44f997b584bc9d3d9f, type: 2}
+  - {fileID: 11400000, guid: 200e15d58474ba44ca479e7b671773ca, type: 2}
+  startingBoardCards:
+  - {fileID: 11400000, guid: 7885cdd4c571e5245a5f69b008fc21c8, type: 2}
+  - {fileID: 11400000, guid: 7885cdd4c571e5245a5f69b008fc21c8, type: 2}
+  - {fileID: 11400000, guid: 0a3479dcb9c93734087fb36cf2752ac6, type: 2}
+  - {fileID: 11400000, guid: 4292549873f34d64c82ce7b845fca869, type: 2}
+  - {fileID: 11400000, guid: 7ed9dcf3f6b119c4d9b497aef8c1099c, type: 2}
+  startingRelic: {fileID: 0}
