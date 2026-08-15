@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -28,6 +29,14 @@ public class CombatSlotGridUI : MonoBehaviour
     [SerializeField] private float arrowThickness = 12f;
     [SerializeField] private float arrowHeadSize  = 20f;
 
+    [Header("적 의도 표시")]
+    // 아트가 나오기 전까지는 색 도형 + 숫자로 돌린다.
+    // 나중에 IntentIcon 스프라이트만 끼우면 색은 그대로 배경으로 쓸 수 있다.
+    [SerializeField] private float   intentOffsetY = 96f;   // 슬롯 중심에서 위로
+    [SerializeField] private Vector2 intentSize    = new(56f, 32f);
+    [SerializeField] private Vector2 threatSize    = new(48f, 32f);
+    [SerializeField] private int     labelFontSize = 16;    // Neo둥근모는 16px 배수만 쓴다
+
     // CombatPanel이 구독 → CombatManager.TryPlayCard() 호출
     public event Action<CardData, CombatEntity, CombatEntity> OnTargetSelected;
 
@@ -37,7 +46,8 @@ public class CombatSlotGridUI : MonoBehaviour
 
     private SlotSystem   slots;          // BindCombat에서 받아둔다
     private CombatEntity selected;       // 이동시킬 아군
-    private readonly List<GameObject> moveArrows = new();
+    private readonly List<GameObject> moveArrows   = new();
+    private readonly List<GameObject> intentLabels = new();
 
     private void Awake()
     {
@@ -61,6 +71,12 @@ public class CombatSlotGridUI : MonoBehaviour
         slots = slotSystem;
         slots.OnSlotsChanged += Rebind;   // 카드 효과로 자리가 바뀌어도 따라간다
 
+        if (combatManager != null)
+        {
+            combatManager.OnIntentsRefreshed -= RedrawIntents;
+            combatManager.OnIntentsRefreshed += RedrawIntents;
+        }
+
         Rebind();
     }
 
@@ -74,6 +90,8 @@ public class CombatSlotGridUI : MonoBehaviour
             enemySlots[i] .Bind(slots.GetEntityAt(isPlayerSide: false, slot: i + 1));
         }
 
+        RedrawIntents();
+
         // 선택한 유닛이 살아 있으면 새 위치에 화살표를 다시 그린다
         if (selected != null && selected.IsActive) ShowMoveArrows(selected);
         else                                       ClearSelection();
@@ -84,6 +102,9 @@ public class CombatSlotGridUI : MonoBehaviour
         if (slots != null) slots.OnSlotsChanged -= Rebind;
         slots = null;
 
+        if (combatManager != null) combatManager.OnIntentsRefreshed -= RedrawIntents;
+
+        ClearIntentLabels();
         ClearSelection();
         foreach (var s in playerSlots) s.Unbind();
         foreach (var s in enemySlots)  s.Unbind();
@@ -235,6 +256,119 @@ public class CombatSlotGridUI : MonoBehaviour
         foreach (var go in moveArrows)
             if (go != null) Destroy(go);
         moveArrows.Clear();
+    }
+
+    // ── 적 의도 표시 ─────────────────────────────────────
+    //
+    // 두 가지를 그린다.
+    //   적 슬롯   — 무엇을 할 것인가 (종류 색 + 수치)
+    //   플레이어 슬롯 — 그래서 이 칸이 얼마나 맞는가 (합계 피해)
+    //
+    // 두 번째가 이 게임의 핵심이다. 적이 여럿이면 한 칸에 여러 공격이 겹치므로
+    // CombatManager가 지금 배치 기준으로 합산해준다.
+
+    private void RedrawIntents()
+    {
+        ClearIntentLabels();
+        if (slots == null || combatManager == null) return;
+
+        for (int i = 0; i < 4; i++)
+        {
+            // 적 배지
+            var enemy = enemySlots[i].Occupant;
+            var intent = enemy?.CurrentIntent;
+            if (intent != null && enemy.IsActive)
+            {
+                string text = intent.previewValue > 0 ? intent.previewValue.ToString() : IntentLabel(intent.kind);
+                BuildLabel(enemySlots[i], intentSize, IntentColor(intent.kind), Color.white, text);
+            }
+
+            // 플레이어 위협 수치.
+            // 적 공격 배지와 같은 붉은색을 쓰면 어느 쪽 정보인지 헷갈리므로
+            // 더 어둡게 깔고 글자를 노랗게 빼 "내가 맞을 양"임을 구분한다.
+            int incoming = combatManager.GetIncomingDamage(i + 1);
+            if (incoming > 0)
+                BuildLabel(playerSlots[i], threatSize,
+                           new Color(0.16f, 0.04f, 0.06f, 0.95f),
+                           new Color(1f, 0.72f, 0.30f), incoming.ToString());
+        }
+    }
+
+    private void BuildLabel(SlotUI slotUI, Vector2 size, Color background, Color textColor, string text)
+    {
+        Vector2 center = slotUI.GetComponent<RectTransform>().anchoredPosition;
+
+        var go = new GameObject("IntentLabel", typeof(RectTransform));
+        go.transform.SetParent(transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot            = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = center + new Vector2(0f, intentOffsetY);
+        rt.sizeDelta        = size;
+
+        var img = go.AddComponent<Image>();
+        img.color         = background;
+        img.raycastTarget = false;   // 슬롯 클릭을 가로채면 안 된다
+
+        var labelGo = new GameObject("Text", typeof(RectTransform));
+        labelGo.transform.SetParent(go.transform, false);
+
+        var lrt = labelGo.GetComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero;
+        lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+
+        var label = labelGo.AddComponent<TextMeshProUGUI>();
+        var font  = slotUI.LabelFont;
+        if (font != null) label.font = font;
+
+        label.text                 = text;
+        label.color                = textColor;
+        label.fontSize             = labelFontSize;   // 비트맵 폰트라 배수를 지켜야 한다
+        label.alignment            = TextAlignmentOptions.Center;
+        label.enableAutoSizing     = false;
+        label.raycastTarget        = false;
+        label.fontStyle            = FontStyles.Normal;  // Neo둥근모는 볼드·이탤릭 금지
+
+        intentLabels.Add(go);
+    }
+
+    private void ClearIntentLabels()
+    {
+        foreach (var go in intentLabels)
+            if (go != null) Destroy(go);
+        intentLabels.Clear();
+    }
+
+    // 수치가 없는 의도(도발·디버프 등)에 쓰는 짧은 한글 라벨.
+    // Neo둥근모에 ※★→ 같은 기호가 없어 기호로 때울 수 없다.
+    private static string IntentLabel(IntentKind kind)
+    {
+        switch (kind)
+        {
+            case IntentKind.Debuff:       return "저주";
+            case IntentKind.Buff:         return "강화";
+            case IntentKind.Heal:         return "회복";
+            case IntentKind.Taunt:        return "도발";
+            case IntentKind.SelfDestruct: return "자폭";
+            default:                      return "행동";
+        }
+    }
+
+    private static Color IntentColor(IntentKind kind)
+    {
+        switch (kind)
+        {
+            case IntentKind.Attack:       return new Color(0.72f, 0.13f, 0.13f, 0.92f);  // 붉은색
+            case IntentKind.AttackAoe:    return new Color(0.86f, 0.35f, 0.10f, 0.92f);  // 주황
+            case IntentKind.Debuff:       return new Color(0.44f, 0.20f, 0.60f, 0.92f);  // 보라
+            case IntentKind.Buff:         return new Color(0.20f, 0.42f, 0.62f, 0.92f);  // 파랑
+            case IntentKind.Heal:         return new Color(0.20f, 0.55f, 0.30f, 0.92f);  // 초록
+            case IntentKind.Taunt:        return new Color(0.60f, 0.50f, 0.15f, 0.92f);  // 황토
+            case IntentKind.SelfDestruct: return new Color(0.90f, 0.75f, 0.10f, 0.95f);  // 노랑 — 가장 눈에 띄게
+            default:                      return new Color(0.35f, 0.35f, 0.35f, 0.92f);
+        }
     }
 
     // ── 하이라이트 ───────────────────────────────────────

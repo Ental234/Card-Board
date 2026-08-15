@@ -113,6 +113,20 @@ public enum TargetMode
     Random   = 40, // 후보 중 무작위
 }
 
+// 적 의도(인텐트) 표시 종류 — 아이콘·색을 고르는 데만 쓴다
+// ※ TriggerTiming과 같은 이유로 번호를 명시한다 (에셋에 직렬화되지는 않지만 규칙을 통일)
+public enum IntentKind
+{
+    Unknown      = 0,
+    Attack       = 10,  // 단일 공격
+    AttackAoe    = 11,  // 광역 공격
+    Debuff       = 20,  // 적에게 상태이상
+    Buff         = 30,  // 자기·아군 강화 (방어막 포함)
+    Heal         = 31,
+    Taunt        = 32,
+    SelfDestruct = 40,  // 자폭 — 가장 눈에 띄어야 한다
+}
+
 // 게임 전체 페이즈 상태
 // 순환: MainMenu → BoardPhase ⇄ CombatPhase → RunEnd → (메인 메뉴 복귀)
 public enum GamePhase

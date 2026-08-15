@@ -23,6 +23,10 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
     public CombatEntity Occupant     { get; private set; }
     public bool         IsTargetable { get; private set; }
 
+    // 런타임에 만드는 라벨(의도 배지·위협 수치)이 같은 폰트를 쓰도록 넘겨준다.
+    // Neo둥근모를 유지해야 화면 안에서 글자가 따로 놀지 않는다.
+    public TMP_FontAsset LabelFont => hpText != null ? hpText.font : null;
+
     // ── 바닥 패드 ───────────────────────────────────────
 
     // 프리팹 오버라이드는 되돌아가기 쉬우므로 진영별 패드는 런타임에 지정한다.

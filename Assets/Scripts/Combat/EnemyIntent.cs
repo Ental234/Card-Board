@@ -9,8 +9,11 @@ public class EnemyIntent
 {
     public ActionPatternData pattern;
 
-    // ── 아래는 전부 UI 표시용 스냅샷 ──
-    public SlotMask previewSlots;  // 결정 시점에 노렸던 슬롯
-    public int      previewValue;  // 예상 피해량(또는 회복량)
-    public bool     isAttack;      // 아이콘 선택용
+    // ── 아래는 전부 UI 표시용 ──
+    //
+    // 슬롯 배치가 바뀔 때마다 CombatManager.RefreshIntentPreviews()가 다시 채운다.
+    // 갱신하지 않으면 플레이어가 피한 뒤에도 옛 슬롯이 위협 표시로 남아 화면이 거짓말을 한다.
+    public SlotMask   previewSlots;  // 지금 노리고 있는 슬롯
+    public int        previewValue;  // 예상 피해량(또는 회복·방어막 수치)
+    public IntentKind kind;          // 아이콘·색 선택용
 }

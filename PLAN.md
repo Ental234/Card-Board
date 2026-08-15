@@ -93,10 +93,10 @@
   패턴이 없는 적은 기존 "최전방 때리기"로 폴백해 회귀가 없다
 - [x] **적 다양성** — 광역 · 도발 · 후열 저격 · 부활 · 자폭 전부 구현·검증.
   하수인 5종에 패턴 연결, `Minion_폭발슬라임` 신규
-- [~] **적 의도(인텐트) 시스템** — **구조 완료, 화면 표시만 남음**.
+- [x] **적 의도(인텐트) 시스템** — 완료 (표시 포함).
   패턴을 라운드 시작에 미리 정해 `CombatEntity.CurrentIntent`에 보관하고,
-  타겟은 실행 순간에 재계산한다 → 슬롯 이동으로 회피가 성립 (검증 완료).
-  `CombatManager.OnIntentDecided` / `OnIntentExecuted` 이벤트에 UI만 붙이면 된다
+  타겟은 실행 순간에 재계산한다 → 슬롯 이동으로 회피가 성립.
+  표시값은 슬롯이 바뀔 때마다 `RefreshIntentPreviews()`가 다시 채우므로 화면이 실제와 어긋나지 않는다
 - [ ] **보드 페이즈 편성창**
   현재 `TryAddCompanion`이 영입 순서대로 빈 슬롯에 꽂을 뿐이라 `CompanionData.preferredSlot`이 미사용.
   `CombatManager.PlaceAllEntities`가 `entity.CurrentSlot`을 읽으므로 편성창은 그 값만 바꾸면 됨
@@ -137,10 +137,10 @@
 > 시스템 구현 시 짝으로 만든다. 단독으로 앞서 만들지 않는다.
 
 ### 중요도 1
-- [ ] **적 의도 표시** — 시스템은 완료됨. `SlotUI.prefab`에 배지(아이콘+수치) 자식을 추가하고
-  `CombatSlotGridUI`가 `CombatManager.OnIntentDecided` / `OnIntentExecuted`를 구독하면 된다.
-  표시할 값은 `EnemyIntent.previewSlots` / `previewValue` / `isAttack`
-  (※ 이 값들은 표시 전용 스냅샷이다. 실행 로직이 읽으면 슬롯 이동 회피가 깨진다)
+- [x] **적 의도 표시** — 완료. `CombatSlotGridUI`가 이동 화살표와 같은 방식으로 런타임 생성한다.
+  적 슬롯 = 무엇을 할지(종류 색 + 수치) / 플레이어 슬롯 = 그 칸이 받을 피해 합계.
+  **아트는 임시 색 도형**이라 아이콘 에셋이 나오면 `IntentColor`/`IntentLabel`만 교체하면 된다
+  (※ `EnemyIntent.preview*`는 표시 전용이다. 실행 로직이 읽으면 슬롯 이동 회피가 깨진다)
 - [ ] **상태이상 표시** — `SlotUI`가 HP·방어막만 표시. 출혈/독/도발/취약이 화면에 안 보임
 - [ ] **편성창 UI** — 시스템과 세트
 

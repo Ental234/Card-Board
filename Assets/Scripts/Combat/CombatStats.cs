@@ -79,6 +79,19 @@ public class CombatStats
         CheckKnockedOut();
     }
 
+    // 실제로 깎지 않고 최종 피해량만 계산한다 (적 의도 표시용).
+    // TakeDamage의 취약 배수와 반드시 같은 식을 써야 표시와 실제가 어긋나지 않는다.
+    // 방어막은 빼지 않는다 — 화면에 방어막이 따로 표시되므로 '들어오는 공격량'을 보여준다.
+    public int PreviewIncomingDamage(int amount)
+    {
+        if (amount <= 0) return 0;
+
+        if (HasStatus(StatusEffect.Vulnerable))
+            amount = Mathf.RoundToInt(amount * 1.5f);
+
+        return amount;
+    }
+
     // HP 상실 — 방어막도 취약도 피격 트리거도 무시하고 HP만 깎는다
     public void LoseHp(int amount)
     {

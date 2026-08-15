@@ -16,9 +16,10 @@ public class CombatManager : MonoBehaviour
     public event Action<CombatEntity> OnEntityTurnBegin;
     public event Action<CombatEntity> OnEntityTurnEnd;
 
-    // 적 의도(인텐트) — 인텐트 UI가 구독할 자리. 아직 구독자 없음
+    // 적 의도(인텐트)
     public event Action<CombatEntity> OnIntentDecided;
     public event Action<CombatEntity> OnIntentExecuted;
+    public event Action               OnIntentsRefreshed;  // 표시값이 갱신됨 (UI 재그리기)
 
     // ── 참조 ────────────────────────────────────────────
 
@@ -79,6 +80,9 @@ public class CombatManager : MonoBehaviour
         player.OnRunEnd            += HandlePlayerDeath;
         player.Stats.OnDamageTaken += HandlePlayerDamaged;
 
+        // 자리가 바뀌면 예고 표시도 따라와야 한다 — 안 그러면 피한 뒤에도 옛 칸이 위협으로 남는다
+        slotSystem.OnSlotsChanged += RefreshIntentPreviews;
+
         foreach (var c in companions)
             c.OnKnockedOutInCombat += HandleCompanionKnockout;
 
@@ -93,6 +97,8 @@ public class CombatManager : MonoBehaviour
     {
         player.OnRunEnd            -= HandlePlayerDeath;
         player.Stats.OnDamageTaken -= HandlePlayerDamaged;
+
+        slotSystem.OnSlotsChanged -= RefreshIntentPreviews;
 
         foreach (var c in companions)
             c.OnKnockedOutInCombat -= HandleCompanionKnockout;
@@ -269,12 +275,27 @@ public class CombatManager : MonoBehaviour
             enemy.SetIntent(BuildIntent(enemy, picked));
             OnIntentDecided?.Invoke(enemy);
         }
+
+        OnIntentsRefreshed?.Invoke();
     }
 
-    // UI에 보여줄 예고 스냅샷. 실행 로직은 이 값을 쓰지 않는다.
+    // UI에 보여줄 예고. 실행 로직은 이 값을 쓰지 않는다.
     private EnemyIntent BuildIntent(CombatEntity enemy, ActionPatternData pattern)
     {
         var intent = new EnemyIntent { pattern = pattern };
+        FillPreview(enemy, intent);
+        return intent;
+    }
+
+    // 지금 이 순간의 슬롯 배치로 예고 표시값을 다시 채운다.
+    // 패턴은 건드리지 않는다 — 바뀌는 건 '누구를 노리는가'뿐이다.
+    private void FillPreview(CombatEntity enemy, EnemyIntent intent)
+    {
+        var pattern = intent.pattern;
+
+        intent.previewSlots = SlotMask.None;
+        intent.previewValue = 0;
+        intent.kind         = IntentKind.Unknown;
 
         foreach (var target in slotSystem.GetPatternTargets(enemy, pattern))
         {
@@ -286,19 +307,88 @@ public class CombatManager : MonoBehaviour
         {
             foreach (var effect in pattern.effects)
             {
-                if (effect.type == EffectType.Damage)
+                switch (effect.type)
                 {
-                    intent.isAttack    = true;
-                    intent.previewValue = enemy.CalculateAttack(effect.value);
-                    break;
+                    case EffectType.Damage:
+                        intent.kind         = pattern.isAoe ? IntentKind.AttackAoe : IntentKind.Attack;
+                        intent.previewValue = enemy.CalculateAttack(effect.value);
+                        break;
+
+                    case EffectType.ApplyStatus:
+                        // 도발은 자기에게 거는 것이라 공격과 구분해서 보여준다
+                        if (intent.kind == IntentKind.Unknown)
+                            intent.kind = effect.status == StatusEffect.Taunt
+                                        ? IntentKind.Taunt
+                                        : (pattern.targetAlly ? IntentKind.Buff : IntentKind.Debuff);
+                        break;
+
+                    case EffectType.Heal:
+                        if (intent.kind == IntentKind.Unknown) intent.kind = IntentKind.Heal;
+                        if (intent.previewValue == 0) intent.previewValue = effect.value;
+                        break;
+
+                    case EffectType.Shield:
+                        if (intent.kind == IntentKind.Unknown) intent.kind = IntentKind.Buff;
+                        if (intent.previewValue == 0) intent.previewValue = effect.value;
+                        break;
                 }
 
-                if (effect.type == EffectType.Heal || effect.type == EffectType.Shield)
-                    intent.previewValue = effect.value;
+                // 공격이 확정되면 더 볼 것 없다 — 피해가 가장 중요한 정보다
+                if (intent.kind == IntentKind.Attack || intent.kind == IntentKind.AttackAoe) break;
             }
         }
 
-        return intent;
+        // 자폭은 무엇을 하든 이게 제일 중요하다
+        if (pattern.selfDestructAfterUse) intent.kind = IntentKind.SelfDestruct;
+    }
+
+    // 슬롯 배치나 상태가 바뀌면 예고 표시를 다시 계산한다.
+    //
+    // 이걸 하지 않으면 플레이어가 노려진 칸에서 빠져나간 뒤에도 옛 칸이 위협 표시로 남아
+    // 화면이 실제 결과와 다른 말을 하게 된다. 반대로 갱신하면 말을 옮길 때마다
+    // 위협 표시가 따라오거나 떨어져 나가는 게 눈에 보인다.
+    public void RefreshIntentPreviews()
+    {
+        if (!combatActive) return;
+
+        if (boss != null && boss.CurrentIntent != null) FillPreview(boss, boss.CurrentIntent);
+
+        foreach (var m in minions)
+            if (m.CurrentIntent != null) FillPreview(m, m.CurrentIntent);
+
+        OnIntentsRefreshed?.Invoke();
+    }
+
+    // 플레이어 슬롯(1~4)이 이번 라운드에 받을 예상 피해 합계.
+    // 예고를 낸 적 전부를 훑어 지금 배치 기준으로 계산한다.
+    public int GetIncomingDamage(int playerSlot)
+    {
+        if (!combatActive) return 0;
+
+        var occupant = slotSystem.GetEntityAt(true, playerSlot);
+        if (occupant == null || !occupant.IsActive) return 0;
+
+        int total = 0;
+        if (boss != null) total += IncomingFrom(boss, occupant);
+        foreach (var m in minions) total += IncomingFrom(m, occupant);
+
+        return total;
+    }
+
+    private int IncomingFrom(CombatEntity enemy, CombatEntity target)
+    {
+        var intent = enemy.CurrentIntent;
+        if (intent == null || !enemy.IsActive || !enemy.CanAct) return 0;
+        if (intent.pattern.effects == null)                     return 0;
+
+        if (!slotSystem.GetPatternTargets(enemy, intent.pattern).Contains(target)) return 0;
+
+        int total = 0;
+        foreach (var effect in intent.pattern.effects)
+            if (effect.type == EffectType.Damage)
+                total += target.Stats.PreviewIncomingDamage(enemy.CalculateAttack(effect.value));
+
+        return total;
     }
 
     // 인텐트에 실린 패턴을 실행한다.
@@ -337,8 +427,9 @@ public class CombatManager : MonoBehaviour
         enemy.MarkPatternUsed(pattern);
         ApplyPatternEffects(enemy, pattern, targets);
 
-        OnIntentExecuted?.Invoke(enemy);
+        // 먼저 지우고 알린다 — 구독자가 다시 그릴 때 이미 끝난 예고가 남아 있으면 안 된다
         enemy.ClearIntent();
+        OnIntentExecuted?.Invoke(enemy);
 
         yield return null;  // 애니메이션 대기 슬롯 — 추후 WaitForSeconds 등으로 교체
     }
@@ -382,6 +473,9 @@ public class CombatManager : MonoBehaviour
             if (reaction != TriggerTiming.None)
                 RunCompanionPatternsImmediate(reaction);
         }
+
+        // 카드로 취약을 걸거나 적을 처치했으면 예상 피해가 달라진다
+        RefreshIntentPreviews();
 
         return true;
     }
