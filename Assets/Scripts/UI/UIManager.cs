@@ -19,8 +19,9 @@ public class UIManager : MonoBehaviour
     [SerializeField] private GameObject hudPanel;
 
     [Header("편성창 (보드 페이즈 오버레이)")]
-    [SerializeField] private GameObject formationPanel;
-    [SerializeField] private Button     formationButton;   // 보드 화면의 '편성' 버튼
+    [SerializeField] private GameObject      formationPanel;
+    [SerializeField] private Button          formationButton;      // 보드 화면의 '편성' 버튼
+    [SerializeField] private TextMeshProUGUI formationButtonLabel; // 대기 인원 배지를 붙인다
 
     [Header("카드 상세 팝업")]
     [SerializeField] private GameObject      cardDetailPopup;
@@ -56,6 +57,8 @@ public class UIManager : MonoBehaviour
         // 모두 끈 채로 시작한다. GameManager가 한 프레임 뒤 첫 페이즈를 알리면
         // HandlePhaseChanged가 알맞은 패널을 켠다.
         formationButton?.onClick.AddListener(ShowFormation);
+        GameManager.Instance.OnFormationChanged += RefreshFormationBadge;
+        RefreshFormationBadge();
 
         HideAll();
         hudPanel?.SetActive(false);
@@ -69,6 +72,7 @@ public class UIManager : MonoBehaviour
         GameManager.Instance.OnStageChanged    -= OnStageChanged;
         GameManager.Instance.OnRunEnded        -= OnRunEnded;
         GameManager.Instance.OnPlayerNodeEvent -= HandlePlayerNodeEvent;
+        GameManager.Instance.OnFormationChanged -= RefreshFormationBadge;
 
         if (RewardManager.Instance != null)
         {
@@ -183,7 +187,21 @@ public class UIManager : MonoBehaviour
         formationPanel?.SetActive(true);
     }
 
-    public void HideFormation() => formationPanel?.SetActive(false);
+    public void HideFormation()
+    {
+        formationPanel?.SetActive(false);
+        RefreshFormationBadge();
+    }
+
+    // 동료를 얻어도 자동 배치되지 않으므로, 편성창을 열기 전까지는 전투에 나가지 않는다.
+    // 버튼에 대기 인원을 띄워 "새 동료가 놀고 있다"를 알린다.
+    private void RefreshFormationBadge()
+    {
+        if (formationButtonLabel == null || GameManager.Instance == null) return;
+
+        int waiting = GameManager.Instance.ReserveCompanions.Count;
+        formationButtonLabel.text = waiting > 0 ? $"편성 ({waiting})" : "편성";
+    }
 
     // ── 카드 상세 팝업 ───────────────────────────────────
 

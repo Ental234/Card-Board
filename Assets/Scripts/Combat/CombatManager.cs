@@ -67,7 +67,18 @@ public class CombatManager : MonoBehaviour
     private void PlaceAllEntities()
     {
         slotSystem.PlaceEntity(player, true, player.CurrentSlot);
-        foreach (var c in companions) slotSystem.PlaceEntity(c, true,  c.CurrentSlot);
+
+        // 대기열 동료(CurrentSlot 0)가 섞여 들어오면 PlaceEntity가 조용히 실패한다.
+        // 여기서 걸러 "왜 안 나왔지"를 배치 단계에서 드러나게 한다.
+        foreach (var c in companions)
+        {
+            if (c.CurrentSlot < 1 || c.CurrentSlot > 4)
+            {
+                Debug.LogWarning($"[CombatManager] {c.EntityName}의 슬롯이 {c.CurrentSlot}이라 배치하지 않았습니다.");
+                continue;
+            }
+            slotSystem.PlaceEntity(c, true, c.CurrentSlot);
+        }
 
         if (boss != null) slotSystem.PlaceEntity(boss, false, boss.CurrentSlot);
         foreach (var m in minions)    slotSystem.PlaceEntity(m, false, m.CurrentSlot);

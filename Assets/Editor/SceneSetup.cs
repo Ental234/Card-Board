@@ -393,14 +393,25 @@ public static class SceneSetup
         SetAnchoredPos(titleGo, 0, 300, 600, 48);
         SetTmpText(titleGo, "편성");
 
-        // 슬롯 위젯은 FormationPanel이 런타임에 이 아래로 만든다
+        // 슬롯·대기열 위젯은 FormationPanel이 런타임에 이 아래로 만든다
         var slotRootGo = GetOrCreateChildUI(formationGo, "SlotRoot");
-        SetAnchoredPos(slotRootGo, 0, 40, 1000, 280);
+        SetAnchoredPos(slotRootGo, 0, 130, 1000, 220);
+
+        var rosterLabelGo = GetOrCreateChildUI(formationGo, "RosterLabel_Text");
+        EnsureComponent<TextMeshProUGUI>(rosterLabelGo);
+        SetAnchoredPos(rosterLabelGo, 0, -20, 400, 32);
+        SetTmpText(rosterLabelGo, "대기열");
+
+        // 대기열은 빈 공간에도 놓을 수 있어야 하므로 영역 전체가 드롭 대상이 된다.
+        // Image가 있어야 RectangleContainsScreenPoint 판정 전에 화면상 영역이 보인다.
+        var rosterRootGo = GetOrCreateChildUI(formationGo, "RosterRoot");
+        SetAnchoredPos(rosterRootGo, 0, -110, 1000, 120);
+        EnsureComponent<Image>(rosterRootGo).color = new Color(0.10f, 0.10f, 0.13f, 1f);
 
         var hintGo = GetOrCreateChildUI(formationGo, "Hint_Text");
         EnsureComponent<TextMeshProUGUI>(hintGo);
-        SetAnchoredPos(hintGo, 0, -180, 900, 40);
-        SetTmpText(hintGo, "자리를 바꿀 두 칸을 차례로 누르세요.");
+        SetAnchoredPos(hintGo, 0, -200, 1100, 40);
+        SetTmpText(hintGo, "끌어다 놓거나, 두 칸을 차례로 누르세요.");
 
         var closeGo = GetOrCreateChildUI(formationGo, "Close_Button");
         SetAnchoredPos(closeGo, 0, -280, 160, 48);
@@ -411,7 +422,8 @@ public static class SceneSetup
         SetTmpText(closeLbl, "닫기");
 
         var panel = formationGo.GetComponent<FormationPanel>();
-        SetSerializedField(panel, "slotRoot",    slotRootGo.transform);
+        SetSerializedField(panel, "slotRoot",    slotRootGo.GetComponent<RectTransform>());
+        SetSerializedField(panel, "rosterRoot",  rosterRootGo.GetComponent<RectTransform>());
         SetSerializedField(panel, "closeButton", closeGo.GetComponent<Button>());
         SetSerializedField(panel, "hintText",    hintGo.GetComponent<TextMeshProUGUI>());
 
@@ -419,8 +431,9 @@ public static class SceneSetup
         var uiManager   = uiManagerGo != null ? uiManagerGo.GetComponent<UIManager>() : null;
         if (uiManager != null)
         {
-            SetSerializedField(uiManager, "formationPanel",  formationGo);
-            SetSerializedField(uiManager, "formationButton", formationBtnGo.GetComponent<Button>());
+            SetSerializedField(uiManager, "formationPanel",       formationGo);
+            SetSerializedField(uiManager, "formationButton",      formationBtnGo.GetComponent<Button>());
+            SetSerializedField(uiManager, "formationButtonLabel", formationBtnLbl.GetComponent<TextMeshProUGUI>());
         }
         else
         {

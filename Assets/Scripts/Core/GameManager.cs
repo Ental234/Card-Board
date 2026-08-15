@@ -180,7 +180,9 @@ public class GameManager : MonoBehaviour
         SetPhase(GamePhase.CombatPhase);
 
         combatManager.OnCombatEnd += HandleCombatEnd;
-        combatManager.StartCombat(playerCharacter, companions, currentBoss, minionEntities);
+        // 진형에 세운 동료만 데려간다. 대기열까지 넘기면 전투에 없는 동료가
+        // 턴을 받고 패턴까지 발동한다.
+        combatManager.StartCombat(playerCharacter, DeployedCompanions, currentBoss, minionEntities);
     }
 
     // 플레이어 노드 착지 — 노드 이벤트 라우팅
@@ -283,7 +285,7 @@ public class GameManager : MonoBehaviour
         SetPhase(GamePhase.CombatPhase);
 
         combatManager.OnCombatEnd += HandleCombatEnd;
-        combatManager.StartCombat(playerCharacter, companions, bossEntity: null, minionList: enemies);
+        combatManager.StartCombat(playerCharacter, DeployedCompanions, bossEntity: null, minionList: enemies);
     }
 
     // ── 전투 종료 핸들러 ─────────────────────────────────
@@ -388,46 +390,61 @@ public class GameManager : MonoBehaviour
     // ── 동료 관리 ────────────────────────────────────────
 
     // 이벤트·보물·상점에서 동료 획득 시 호출
+    //
+    // 자동 배치하지 않고 대기열로 보낸다. 진형에 누구를 세울지는 편성창에서 정한다.
+    // 슬롯이 4칸뿐이라 자동 배치하면 나중에 얻은 동료가 조용히 버려지거나
+    // 원치 않는 자리에 꽂히는데, 그게 오히려 손해다.
     public bool TryAddCompanion(CompanionData data)
     {
-        int slot = FindFreePlayerSlot();
-        if (slot == -1) return false;  // 슬롯 만석
-
         var companion = Instantiate(companionEntityTemplate);
         companion.Initialize(data);
-        companion.SetSlot(slot);
+        companion.SetSlot(SlotReserve);   // 대기열
         companions.Add(companion);
+
+        OnFormationChanged?.Invoke();
         return true;
-    }
-
-    // 플레이어·동료가 쓰지 않는 빈 슬롯 탐색
-    //
-    // 슬롯 1을 플레이어 전용으로 고정하면 안 된다 — CharacterData.initialSlot이
-    // 캐릭터마다 다르다(GDD: 전사 1 / 도적 2 / 마법사 3). 전용으로 두면
-    // 마법사를 골랐을 때 슬롯 1이 영영 비어 동료가 2명밖에 못 들어간다.
-    // 플레이어가 선 자리는 usedSlots에 들어가므로 자연히 걸러진다.
-    private int FindFreePlayerSlot()
-    {
-        var usedSlots = new HashSet<int>();
-        usedSlots.Add(playerCharacter.CurrentSlot);
-        foreach (var c in companions) usedSlots.Add(c.CurrentSlot);
-
-        for (int s = 1; s <= 4; s++)
-            if (!usedSlots.Contains(s)) return s;
-
-        return -1;
     }
 
     // ── 편성 (보드 페이즈) ───────────────────────────────
     //
-    // 전투 밖에서는 행동력 없이 자유롭게 자리를 바꾼다.
+    // 전투 밖에서는 행동력 없이 자유롭게 진형을 짠다.
     // 전투 중 이동은 CombatManager.TryMoveFriendly가 담당하며 AP를 쓴다 — 둘은 별개다.
     //
-    // 자리를 '맞바꾸는' 방식이라 두 유닛이 같은 슬롯을 갖는 상태가 생기지 않는다.
-    // (같은 슬롯이 되면 SlotSystem.PlaceEntity가 조용히 실패해 한 명이 전투에서 사라진다)
+    // 배치 여부는 CurrentSlot 하나로 표현한다 (CombatEntity의 원래 정의: 1~4 배치 / 0 미배치).
+    // 별도의 '배치된 동료' 목록을 두면 두 목록이 어긋나는 순간 유닛이 사라지거나 중복된다.
+
+    public const int SlotReserve = 0;   // 대기열
+
+    public event Action OnFormationChanged;
+
+    // 진형에 세운 동료만. 전투에는 이쪽만 넘긴다.
+    public List<CompanionEntity> DeployedCompanions
+    {
+        get
+        {
+            var list = new List<CompanionEntity>();
+            foreach (var c in companions)
+                if (c.CurrentSlot >= 1 && c.CurrentSlot <= 4) list.Add(c);
+            return list;
+        }
+    }
+
+    // 대기열에 있는 동료 (진형 밖)
+    public List<CompanionEntity> ReserveCompanions
+    {
+        get
+        {
+            var list = new List<CompanionEntity>();
+            foreach (var c in companions)
+                if (c.CurrentSlot == SlotReserve) list.Add(c);
+            return list;
+        }
+    }
 
     public CombatEntity GetFormationOccupant(int slot)
     {
+        if (slot < 1 || slot > 4) return null;
+
         if (playerCharacter != null && playerCharacter.CurrentSlot == slot) return playerCharacter;
 
         foreach (var c in companions)
@@ -439,7 +456,7 @@ public class GameManager : MonoBehaviour
     // slotA와 slotB의 점유자를 맞바꾼다. 한쪽이 비어 있으면 그냥 이동한다.
     public bool TrySwapFormation(int slotA, int slotB)
     {
-        if (CurrentPhase != GamePhase.BoardPhase) return false;   // 전투 중에는 AP 규칙을 따라야 한다
+        if (!CanEditFormation())                  return false;
         if (slotA == slotB)                       return false;
         if (slotA < 1 || slotA > 4 || slotB < 1 || slotB > 4) return false;
 
@@ -454,7 +471,66 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    public event Action OnFormationChanged;
+    // 대기열 → 진형. 그 자리에 동료가 서 있었으면 서로 자리를 바꾼다(그 동료가 대기열로).
+    public bool TryDeployCompanion(CompanionEntity companion, int slot)
+    {
+        if (!CanEditFormation())                     return false;
+        if (companion == null || slot < 1 || slot > 4) return false;
+        if (!companions.Contains(companion))         return false;
+        if (companion.CurrentSlot == slot)           return false;
+
+        var occupant = GetFormationOccupant(slot);
+
+        // 플레이어는 대기열로 내릴 수 없다 — 진형에서 빠지면 전투에 나갈 사람이 없다
+        if (occupant == playerCharacter) return false;
+
+        int from = companion.CurrentSlot;    // 대기열(0)일 수도, 다른 슬롯일 수도 있다
+        companion.SetSlot(slot);
+
+        // 밀려난 동료는 시전자가 있던 자리로. 대기열에서 왔다면 대기열로 내려간다.
+        (occupant as CompanionEntity)?.SetSlot(from);
+
+        OnFormationChanged?.Invoke();
+        return true;
+    }
+
+    // 진형 → 대기열
+    public bool TryWithdrawFromSlot(int slot)
+    {
+        if (!CanEditFormation()) return false;
+
+        var occupant = GetFormationOccupant(slot) as CompanionEntity;
+        if (occupant == null) return false;   // 빈 칸이거나 플레이어
+
+        occupant.SetSlot(SlotReserve);
+        OnFormationChanged?.Invoke();
+        return true;
+    }
+
+    // 빈 자리에 바로 세운다 (편성창에서 더블클릭 등 빠른 배치용)
+    public bool TryDeployToFreeSlot(CompanionEntity companion)
+    {
+        int slot = FindFreeFormationSlot();
+        if (slot == -1) return false;
+
+        return TryDeployCompanion(companion, slot);
+    }
+
+    // 아무도 서 있지 않은 슬롯.
+    //
+    // 슬롯 1을 플레이어 전용으로 고정하면 안 된다 — CharacterData.initialSlot이
+    // 캐릭터마다 다르다(GDD: 전사 1 / 도적 2 / 마법사 3). 전용으로 두면
+    // 마법사를 골랐을 때 슬롯 1이 영영 비어 동료가 2명밖에 못 들어간다.
+    private int FindFreeFormationSlot()
+    {
+        for (int s = 1; s <= 4; s++)
+            if (GetFormationOccupant(s) == null) return s;
+
+        return -1;
+    }
+
+    // 전투 중에는 편성을 못 바꾼다 — 그쪽은 AP를 쓰는 한 칸 이동 규칙을 따라야 한다
+    private bool CanEditFormation() => CurrentPhase == GamePhase.BoardPhase;
 
     // ── 보드 카드 사용 (UI → GameManager → BoardPhaseManager) ──
 
