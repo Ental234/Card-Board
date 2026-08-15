@@ -21,7 +21,7 @@ public class SlotSystem : MonoBehaviour
 
         slots[idx] = entity;
         entity.SetSlot(slot);
-        OnSlotsChanged?.Invoke();
+        RaiseSlotsChanged();
         return true;
     }
 
@@ -32,7 +32,7 @@ public class SlotSystem : MonoBehaviour
         if (idx >= 0 && idx < 4 && slots[idx] == entity)
         {
             slots[idx] = null;
-            OnSlotsChanged?.Invoke();
+            RaiseSlotsChanged();
         }
     }
 
@@ -40,6 +40,55 @@ public class SlotSystem : MonoBehaviour
 
     // 슬롯 구성이 바뀔 때마다 발생 — UI가 구독해 다시 바인딩한다
     public event Action OnSlotsChanged;
+
+    // 미리보기 중에는 이벤트를 막는다. 안 그러면 UI가 가상 배치를 진짜인 줄 알고 다시 그린다.
+    private int suppressDepth;
+
+    private void RaiseSlotsChanged()
+    {
+        if (suppressDepth > 0) return;
+        OnSlotsChanged?.Invoke();
+    }
+
+    // 실제로 옮기지 않고 "옮겼다면 어떻게 되는지"만 계산한다.
+    //
+    // 행동력을 쓰기 전에 결과를 보여주기 위한 것이다. 자리를 잠깐 바꿔 action을 돌리고
+    // finally에서 반드시 원래대로 되돌린다 — 중간에 예외가 나도 배치가 틀어지면 안 된다.
+    // 이동할 수 없는 방향이면 현재 상태 그대로 action만 돌린다.
+    public void SimulateMove(CombatEntity entity, int direction, Action action)
+    {
+        if (action == null) return;
+
+        if (entity == null || !CanMoveOrSwap(entity, direction, out var swapWith))
+        {
+            action();
+            return;
+        }
+
+        var slots = GetSlotsArray(entity.IsPlayerSide);
+        int from  = entity.CurrentSlot;
+        int to    = from - direction;
+
+        suppressDepth++;
+        try
+        {
+            slots[from - 1] = swapWith;
+            slots[to   - 1] = entity;
+            entity.SetSlot(to);
+            swapWith?.SetSlot(from);
+
+            action();
+        }
+        finally
+        {
+            slots[from - 1] = entity;
+            slots[to   - 1] = swapWith;
+            entity.SetSlot(from);
+            swapWith?.SetSlot(to);
+
+            suppressDepth--;
+        }
+    }
 
     // direction: +1 = 전방(슬롯 감소), -1 = 후방(슬롯 증가)
     //
@@ -84,7 +133,7 @@ public class SlotSystem : MonoBehaviour
         entity.SetSlot(to);
         swapWith?.SetSlot(from);
 
-        OnSlotsChanged?.Invoke();
+        RaiseSlotsChanged();
         return true;
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 // 전투 슬롯 8칸 배치 + 타겟 선택 + 포지션 직접 이동
@@ -48,6 +49,9 @@ public class CombatSlotGridUI : MonoBehaviour
     private CombatEntity selected;       // 이동시킬 아군
     private readonly List<GameObject> moveArrows   = new();
     private readonly List<GameObject> intentLabels = new();
+
+    // 이동 화살표에 마우스를 올린 동안의 예상 피해 (인덱스 0 = 슬롯 1). null이면 미리보기 아님
+    private int[] movePreview;
 
     private void Awake()
     {
@@ -213,6 +217,12 @@ public class CombatSlotGridUI : MonoBehaviour
         btn.targetGraphic = img;
         btn.onClick.AddListener(() => Move(entity, direction));
 
+        // 화살표에 올리면 "옮긴 뒤 각 칸이 받을 피해"를 미리 보여준다.
+        // 행동력을 쓰고 나서야 결과를 아는 상황을 없애기 위한 것이다.
+        var trigger = go.AddComponent<EventTrigger>();
+        AddTrigger(trigger, EventTriggerType.PointerEnter, () => ShowMovePreview(entity, direction));
+        AddTrigger(trigger, EventTriggerType.PointerExit,  ClearMovePreview);
+
         // 화살촉 — 정사각형을 45도 돌려 끝에 붙인다
         var head = new GameObject("Head", typeof(RectTransform));
         head.transform.SetParent(go.transform, false);
@@ -253,6 +263,9 @@ public class CombatSlotGridUI : MonoBehaviour
 
     private void ClearArrows()
     {
+        // 화살표가 사라지면 PointerExit가 안 올 수 있다 — 미리보기를 여기서 확실히 끈다
+        movePreview = null;
+
         foreach (var go in moveArrows)
             if (go != null) Destroy(go);
         moveArrows.Clear();
@@ -284,14 +297,50 @@ public class CombatSlotGridUI : MonoBehaviour
             }
 
             // 플레이어 위협 수치.
-            // 적 공격 배지와 같은 붉은색을 쓰면 어느 쪽 정보인지 헷갈리므로
-            // 더 어둡게 깔고 글자를 노랗게 빼 "내가 맞을 양"임을 구분한다.
-            int incoming = combatManager.GetIncomingDamage(i + 1);
-            if (incoming > 0)
-                BuildLabel(playerSlots[i], threatSize,
-                           new Color(0.16f, 0.04f, 0.06f, 0.95f),
-                           new Color(1f, 0.72f, 0.30f), incoming.ToString());
+            // 화면에 뜨는 숫자는 항상 '실제로 들어올 피해'다 (취약 배수 포함).
+            // 미리보기 중이면 옮긴 뒤의 값으로 바꿔 보여주고, 좋아졌는지 나빠졌는지 색으로 구분한다.
+            int current   = combatManager.GetIncomingDamage(i + 1);
+            int displayed = movePreview != null ? movePreview[i] : current;
+
+            if (displayed <= 0) continue;
+
+            // 적 공격 배지와 같은 붉은색을 쓰면 어느 쪽 정보인지 헷갈리므로 어둡게 깔고 글자를 뺀다
+            Color background = new(0.16f, 0.04f, 0.06f, 0.95f);
+            Color textColor  = new(1f, 0.72f, 0.30f);
+
+            if (movePreview != null)
+            {
+                if (displayed < current)      textColor = new Color(0.45f, 0.95f, 0.45f);  // 줄어든다
+                else if (displayed > current) textColor = new Color(1f, 0.40f, 0.35f);     // 늘어난다
+            }
+
+            BuildLabel(playerSlots[i], threatSize, background, textColor, displayed.ToString());
         }
+    }
+
+    // ── 이동 미리보기 ────────────────────────────────────
+
+    private void ShowMovePreview(CombatEntity entity, int direction)
+    {
+        if (combatManager == null || entity == null) return;
+
+        movePreview = combatManager.PreviewIncomingAfterMove(entity, direction);
+        RedrawIntents();
+    }
+
+    private void ClearMovePreview()
+    {
+        if (movePreview == null) return;
+
+        movePreview = null;
+        RedrawIntents();
+    }
+
+    private static void AddTrigger(EventTrigger trigger, EventTriggerType type, Action callback)
+    {
+        var entry = new EventTrigger.Entry { eventID = type };
+        entry.callback.AddListener(_ => callback());
+        trigger.triggers.Add(entry);
     }
 
     private void BuildLabel(SlotUI slotUI, Vector2 size, Color background, Color textColor, string text)

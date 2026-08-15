@@ -375,6 +375,25 @@ public class CombatManager : MonoBehaviour
         return total;
     }
 
+    // 이 방향으로 옮겼을 때 각 플레이어 슬롯이 받게 될 피해 (인덱스 0 = 슬롯 1).
+    //
+    // 행동력을 쓰기 '전'에 결과를 보여주기 위한 것이다.
+    // 취약 같은 보정은 사람을 따라 움직이므로, 화면 숫자를 원본으로 낮춰 표시하는 대신
+    // 옮긴 뒤의 정확한 값을 그대로 계산해 보여준다 — 플레이어가 암산할 게 없어야 한다.
+    public int[] PreviewIncomingAfterMove(CombatEntity entity, int direction)
+    {
+        var result = new int[4];
+        if (!combatActive) return result;
+
+        slotSystem.SimulateMove(entity, direction, () =>
+        {
+            for (int i = 0; i < 4; i++)
+                result[i] = GetIncomingDamage(i + 1);
+        });
+
+        return result;
+    }
+
     private int IncomingFrom(CombatEntity enemy, CombatEntity target)
     {
         var intent = enemy.CurrentIntent;
