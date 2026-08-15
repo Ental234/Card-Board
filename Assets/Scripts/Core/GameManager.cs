@@ -400,18 +400,61 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    // 슬롯 1은 플레이어 전용 — 2~4 중 빈 슬롯 탐색
+    // 플레이어·동료가 쓰지 않는 빈 슬롯 탐색
+    //
+    // 슬롯 1을 플레이어 전용으로 고정하면 안 된다 — CharacterData.initialSlot이
+    // 캐릭터마다 다르다(GDD: 전사 1 / 도적 2 / 마법사 3). 전용으로 두면
+    // 마법사를 골랐을 때 슬롯 1이 영영 비어 동료가 2명밖에 못 들어간다.
+    // 플레이어가 선 자리는 usedSlots에 들어가므로 자연히 걸러진다.
     private int FindFreePlayerSlot()
     {
         var usedSlots = new HashSet<int>();
         usedSlots.Add(playerCharacter.CurrentSlot);
         foreach (var c in companions) usedSlots.Add(c.CurrentSlot);
 
-        for (int s = 2; s <= 4; s++)
+        for (int s = 1; s <= 4; s++)
             if (!usedSlots.Contains(s)) return s;
 
         return -1;
     }
+
+    // ── 편성 (보드 페이즈) ───────────────────────────────
+    //
+    // 전투 밖에서는 행동력 없이 자유롭게 자리를 바꾼다.
+    // 전투 중 이동은 CombatManager.TryMoveFriendly가 담당하며 AP를 쓴다 — 둘은 별개다.
+    //
+    // 자리를 '맞바꾸는' 방식이라 두 유닛이 같은 슬롯을 갖는 상태가 생기지 않는다.
+    // (같은 슬롯이 되면 SlotSystem.PlaceEntity가 조용히 실패해 한 명이 전투에서 사라진다)
+
+    public CombatEntity GetFormationOccupant(int slot)
+    {
+        if (playerCharacter != null && playerCharacter.CurrentSlot == slot) return playerCharacter;
+
+        foreach (var c in companions)
+            if (c.CurrentSlot == slot) return c;
+
+        return null;
+    }
+
+    // slotA와 slotB의 점유자를 맞바꾼다. 한쪽이 비어 있으면 그냥 이동한다.
+    public bool TrySwapFormation(int slotA, int slotB)
+    {
+        if (CurrentPhase != GamePhase.BoardPhase) return false;   // 전투 중에는 AP 규칙을 따라야 한다
+        if (slotA == slotB)                       return false;
+        if (slotA < 1 || slotA > 4 || slotB < 1 || slotB > 4) return false;
+
+        var a = GetFormationOccupant(slotA);
+        var b = GetFormationOccupant(slotB);
+        if (a == null && b == null) return false;
+
+        a?.SetSlot(slotB);
+        b?.SetSlot(slotA);
+
+        OnFormationChanged?.Invoke();
+        return true;
+    }
+
+    public event Action OnFormationChanged;
 
     // ── 보드 카드 사용 (UI → GameManager → BoardPhaseManager) ──
 

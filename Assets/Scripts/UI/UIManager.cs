@@ -18,6 +18,10 @@ public class UIManager : MonoBehaviour
     [SerializeField] private GameObject rewardPanel;
     [SerializeField] private GameObject hudPanel;
 
+    [Header("편성창 (보드 페이즈 오버레이)")]
+    [SerializeField] private GameObject formationPanel;
+    [SerializeField] private Button     formationButton;   // 보드 화면의 '편성' 버튼
+
     [Header("카드 상세 팝업")]
     [SerializeField] private GameObject      cardDetailPopup;
     [SerializeField] private TextMeshProUGUI popupCardName;
@@ -51,6 +55,8 @@ public class UIManager : MonoBehaviour
 
         // 모두 끈 채로 시작한다. GameManager가 한 프레임 뒤 첫 페이즈를 알리면
         // HandlePhaseChanged가 알맞은 패널을 켠다.
+        formationButton?.onClick.AddListener(ShowFormation);
+
         HideAll();
         hudPanel?.SetActive(false);
         cardDetailPopup?.SetActive(false);
@@ -163,6 +169,22 @@ public class UIManager : MonoBehaviour
         GameManager.Instance?.NotifyNodeResolved();   // 멈춰 있던 보드 턴 재개
     }
 
+    // ── 편성창 ───────────────────────────────────────────
+    //
+    // 보드 패널 위에 덮어씌우는 오버레이다 (페이즈 전환이 아니다).
+    // 보드 턴을 멈추지 않으므로 NotifyNodeResolved를 부르지 않는다 —
+    // 노드 처리 대기 중에 열어도 흐름이 꼬이지 않는다.
+
+    public void ShowFormation()
+    {
+        if (GameManager.Instance == null) return;
+        if (GameManager.Instance.CurrentPhase != GamePhase.BoardPhase) return;
+
+        formationPanel?.SetActive(true);
+    }
+
+    public void HideFormation() => formationPanel?.SetActive(false);
+
     // ── 카드 상세 팝업 ───────────────────────────────────
 
     public void ShowCardDetail(CardData data, Vector3 worldPos)
@@ -194,6 +216,7 @@ public class UIManager : MonoBehaviour
         shopPanel?  .SetActive(false);
         runEndPanel?.SetActive(false);
         hudPanel?   .SetActive(false);
+        formationPanel?.SetActive(false);   // 페이즈가 바뀌면 오버레이도 닫는다
     }
 
     private void OnStageChanged(int stage) { }  // HUD가 직접 구독

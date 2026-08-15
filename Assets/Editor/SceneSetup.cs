@@ -349,12 +349,90 @@ public static class SceneSetup
         var cm = cmGo.GetComponent<CombatManager>();
         SetSerializedField(cm, "slotSystem", ssGo.GetComponent<SlotSystem>());
 
+        BuildFormationUI();
+
         // 씬 저장
         UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
             UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
 
         Debug.Log("=== 씬 셋업 완료! Ctrl+S로 저장하세요. ===");
         EditorUtility.DisplayDialog("완료", "씬 셋업이 완료됐습니다!\nCtrl+S로 저장하세요.", "확인");
+    }
+
+    // ── 편성창 ───────────────────────────────────────────────
+    //
+    // SetupScene에서도 부르지만 따로 실행할 수 있게 분리해 뒀다.
+    // 여기에는 모달 대화상자를 두지 않는다 — 스크립트로 자동 실행할 때 에디터가 멈춘다.
+    [MenuItem("Tools/나의꿈4트/Setup Formation Panel")]
+    public static void BuildFormationUI()
+    {
+        var canvasGo = GameObject.Find("Canvas");
+        if (canvasGo == null) { Debug.LogError("[SceneSetup] Canvas를 찾지 못했습니다."); return; }
+
+        var boardGo = canvasGo.transform.Find("BoardPanel")?.gameObject;
+        if (boardGo == null) { Debug.LogError("[SceneSetup] BoardPanel을 찾지 못했습니다."); return; }
+
+        // 보드 화면의 '편성' 버튼
+        var formationBtnGo = GetOrCreateChildUI(boardGo, "Formation_Button");
+        SetAnchoredPos(formationBtnGo, -820, 420, 140, 48);
+        EnsureComponent<Button>(formationBtnGo);
+        EnsureComponent<Image>(formationBtnGo).color = new Color(0.35f, 0.30f, 0.16f);
+        var formationBtnLbl = GetOrCreateChildUI(formationBtnGo, "Label");
+        EnsureComponent<TextMeshProUGUI>(formationBtnLbl);
+        SetTmpText(formationBtnLbl, "편성");
+
+        // 편성 패널 (보드 위에 덮는 오버레이)
+        var formationGo = GetOrCreateChildUI(canvasGo, "FormationPanel");
+        SetFullStretch(formationGo);
+        // 완전 불투명 — 살짝이라도 비치면 뒤의 보드 맵·버튼이 그대로 읽혀 화면이 어지럽다
+        EnsureComponent<Image>(formationGo).color = new Color(0.05f, 0.05f, 0.08f, 1f);
+        EnsureComponent<FormationPanel>(formationGo);
+
+        var titleGo = GetOrCreateChildUI(formationGo, "Title_Text");
+        EnsureComponent<TextMeshProUGUI>(titleGo);
+        SetAnchoredPos(titleGo, 0, 300, 600, 48);
+        SetTmpText(titleGo, "편성");
+
+        // 슬롯 위젯은 FormationPanel이 런타임에 이 아래로 만든다
+        var slotRootGo = GetOrCreateChildUI(formationGo, "SlotRoot");
+        SetAnchoredPos(slotRootGo, 0, 40, 1000, 280);
+
+        var hintGo = GetOrCreateChildUI(formationGo, "Hint_Text");
+        EnsureComponent<TextMeshProUGUI>(hintGo);
+        SetAnchoredPos(hintGo, 0, -180, 900, 40);
+        SetTmpText(hintGo, "자리를 바꿀 두 칸을 차례로 누르세요.");
+
+        var closeGo = GetOrCreateChildUI(formationGo, "Close_Button");
+        SetAnchoredPos(closeGo, 0, -280, 160, 48);
+        EnsureComponent<Button>(closeGo);
+        EnsureComponent<Image>(closeGo).color = new Color(0.55f, 0.22f, 0.22f);
+        var closeLbl = GetOrCreateChildUI(closeGo, "Label");
+        EnsureComponent<TextMeshProUGUI>(closeLbl);
+        SetTmpText(closeLbl, "닫기");
+
+        var panel = formationGo.GetComponent<FormationPanel>();
+        SetSerializedField(panel, "slotRoot",    slotRootGo.transform);
+        SetSerializedField(panel, "closeButton", closeGo.GetComponent<Button>());
+        SetSerializedField(panel, "hintText",    hintGo.GetComponent<TextMeshProUGUI>());
+
+        var uiManagerGo = GameObject.Find("UIManager");
+        var uiManager   = uiManagerGo != null ? uiManagerGo.GetComponent<UIManager>() : null;
+        if (uiManager != null)
+        {
+            SetSerializedField(uiManager, "formationPanel",  formationGo);
+            SetSerializedField(uiManager, "formationButton", formationBtnGo.GetComponent<Button>());
+        }
+        else
+        {
+            Debug.LogWarning("[SceneSetup] UIManager를 찾지 못해 편성창 참조를 연결하지 못했습니다.");
+        }
+
+        formationGo.SetActive(false);
+
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
+            UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+        Debug.Log("[SceneSetup] 편성창 구성 완료");
     }
 
     // ── 유틸 ─────────────────────────────────────────────────

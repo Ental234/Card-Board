@@ -219,7 +219,13 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
     private void ClearStatusChips()
     {
         foreach (var go in statusChips)
-            if (go != null) Destroy(go);
+        {
+            if (go == null) continue;
+
+            // Destroy는 프레임 끝에 처리되므로 먼저 꺼야 새 칩과 한 프레임 겹치지 않는다
+            go.SetActive(false);
+            Destroy(go);
+        }
         statusChips.Clear();
     }
 
