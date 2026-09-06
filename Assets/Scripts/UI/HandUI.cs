@@ -21,6 +21,10 @@ public class HandUI : MonoBehaviour
 
     public event Action<CardData> OnCardSelected;  // CombatPanel / BoardPanel이 구독
 
+    // 에너지 외의 추가 사용 조건. 전투에서만 CombatPanel이 꽂는다 (슬롯·사거리 판정).
+    // 보드 손패는 비워 두므로 에너지만 본다.
+    public Func<CardData, bool> ExtraUsableCheck;
+
     private readonly List<CardUI>         cardUIs    = new();
     private readonly List<Vector2>        basePositions = new();  // 팬 레이아웃 기본 위치
     private int currentEnergy = 999;
@@ -36,9 +40,18 @@ public class HandUI : MonoBehaviour
     public void UpdateEnergy(int energy)
     {
         currentEnergy = energy;
-        foreach (var ui in cardUIs)
-            ui.SetUsable(ui.Data.energyCost <= currentEnergy);
+        RefreshUsability();
     }
+
+    // 슬롯이 바뀌면 사거리도 바뀌므로 다시 칠해야 한다 (CombatPanel이 OnSlotsChanged로 호출)
+    public void RefreshUsability()
+    {
+        foreach (var ui in cardUIs)
+            ui.SetUsable(IsUsable(ui.Data));
+    }
+
+    private bool IsUsable(CardData data)
+        => data.energyCost <= currentEnergy && (ExtraUsableCheck?.Invoke(data) ?? true);
 
     // ── 카드 생성 & 팬 배치 ──────────────────────────────
 
@@ -57,7 +70,7 @@ public class HandUI : MonoBehaviour
         foreach (var data in hand)
         {
             var ui = Instantiate(cardPrefab, handRoot);
-            ui.Setup(data, data.energyCost <= currentEnergy);
+            ui.Setup(data, IsUsable(data));
             ui.OnClicked    += HandleClicked;
             ui.OnHoverEnter += HandleHoverEnter;
             ui.OnHoverExit  += HandleHoverExit;

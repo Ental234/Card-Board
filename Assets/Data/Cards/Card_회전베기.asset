@@ -17,10 +17,10 @@ MonoBehaviour:
     \uC900\uB2E4."
   artwork: {fileID: 0}
   cardType: 0
-  rangeType: 0
+  rangeType: 1
   classTag: 0
   energyCost: 2
-  useableSlots: 3
+  useableSlots: 15
   targetSlots: 3
   targetAlly: 0
   isAoe: 1

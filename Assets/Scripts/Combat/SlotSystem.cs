@@ -186,25 +186,51 @@ public class SlotSystem : MonoBehaviour
         if (!CanUseFromSlot(user, card)) return new List<CombatEntity>();
 
         bool targetPlayerSide = card.targetAlly ? user.IsPlayerSide : !user.IsPlayerSide;
-        var  candidates       = GetEntitiesInSlots(targetPlayerSide, card.targetSlots);
+        var  candidates       = GetEntitiesInSlots(targetPlayerSide, card.EffectiveTargetSlots);
 
-        if (!card.isAoe && !card.targetAlly)
+        // 도발 — 단일 공격은 도발 중인 적에게 강제로 끌려간다.
+        //
+        // ★ 사거리 밖이어도 끌려간다. "도발 = 반드시 나를 쳐라"에 예외를 두지 않으므로
+        //   후열 도발이 근접 카드를 끌어내는 전술이 성립한다.
+        //   그래서 candidates가 비어 있어도(= 사거리 안에 적이 없어도) 카드가 나간다.
+        //
+        // 주의: 패턴 쪽 GetPatternTargets는 반대로 "도발 대상이 후보에 있을 때만" 좁힌다.
+        //       후열 저격 패턴이 도발을 뚫는 설계라 그렇다.
+        //       카드와 패턴의 도발 규칙이 갈라지는 유일한 지점이니 한쪽만 고치지 말 것.
+        //
+        // targetSlots가 None인 카드(= 후보 0개 = 불발 의도)는 도발도 타지 않는다.
+        if (!card.isAoe && !card.targetAlly && card.EffectiveTargetSlots != SlotMask.None)
         {
-            // 단일 공격 → 도발 체크
             var taunt = GetTauntTarget(targetPlayerSide);
-            if (taunt != null && candidates.Contains(taunt))
-                return new List<CombatEntity> { taunt };
+            if (taunt != null) return new List<CombatEntity> { taunt };
+        }
+
+        // 논타겟 카드 — 플레이어가 고르지 않으므로 여기서 대상을 하나로 확정한다.
+        // 적 패턴이 쓰는 SortByTargetMode를 그대로 재사용한다.
+        //
+        // 도발이 위에서 먼저 반환하므로 도발이 이 규칙을 이긴다 — 의도한 우선순위다.
+        // 하이라이트도 이 목록을 쓰므로 화면에는 실제로 맞을 칸 하나만 밝아진다.
+        if (card.autoTarget && !card.isAoe && candidates.Count > 0)
+        {
+            SortByTargetMode(candidates, user, card.targetMode);
+            return new List<CombatEntity> { candidates[0] };
         }
 
         return candidates;
     }
 
-    // 사용자의 현재 슬롯이 card.useableSlots에 포함되는지 확인
+    // 사용자의 현재 슬롯이 카드의 유효 사용 슬롯에 포함되는지 확인
+    //
+    // EffectiveUseableSlots는 rangeType과 useableSlots의 교집합이라
+    // 여기서 None을 "제한 없음"으로 해석하면 안 된다 — 이미 해석이 끝난 값이고,
+    // None은 "쓸 수 있는 슬롯이 하나도 없다"는 뜻이다.
     public bool CanUseFromSlot(CombatEntity user, CardData card)
     {
-        if (card.useableSlots == SlotMask.None) return true;  // 슬롯 제한 없음
+        if (user == null || card == null)                 return false;
+        if (user.CurrentSlot < 1 || user.CurrentSlot > 4) return false;
+
         SlotMask userFlag = (SlotMask)(1 << (user.CurrentSlot - 1));
-        return (card.useableSlots & userFlag) != 0;
+        return (card.EffectiveUseableSlots & userFlag) != 0;
     }
 
     // ── 행동 패턴 타겟 계산 (동료·적 공용) ─────────────

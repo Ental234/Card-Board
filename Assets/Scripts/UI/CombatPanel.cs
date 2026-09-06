@@ -31,6 +31,10 @@ public class CombatPanel : MonoBehaviour
         slotGridUI.OnTargetSelected += HandleTargetSelected;
         handUI.OnCardSelected       += HandleCardSelected;
 
+        // 슬롯이 바뀌면 사거리가 바뀌므로 손패의 사용 가능 표시를 다시 칠한다
+        slotSystem.OnSlotsChanged += handUI.RefreshUsability;
+        handUI.ExtraUsableCheck    = CanPlayFromCurrentPosition;
+
         endTurnButton.onClick.AddListener(OnEndTurnClicked);
     }
 
@@ -42,6 +46,9 @@ public class CombatPanel : MonoBehaviour
 
         slotGridUI.OnTargetSelected -= HandleTargetSelected;
         handUI.OnCardSelected       -= HandleCardSelected;
+
+        slotSystem.OnSlotsChanged -= handUI.RefreshUsability;
+        handUI.ExtraUsableCheck    = null;
 
         endTurnButton.onClick.RemoveListener(OnEndTurnClicked);
 
@@ -98,13 +105,28 @@ public class CombatPanel : MonoBehaviour
         endTurnButton.interactable = false;
     }
 
+    // ── 사용 가능 판정 ───────────────────────────────────
+
+    // 에너지만으로는 부족하다 — 지금 서 있는 슬롯에서 실제로 나갈 수 있는 카드인지 본다.
+    // 판정 식은 CombatManager.ResolveTargets와 같아야 한다.
+    // 어긋나면 "밝게 보이는데 눌러도 안 나가는" 카드가 다시 생긴다.
+    private bool CanPlayFromCurrentPosition(CardData card)
+    {
+        if (player == null || card == null) return true;   // 전투 밖에서는 막지 않는다
+        if (card.targetSelf)                return true;
+
+        return slotSystem.GetValidTargets(player, card).Count > 0;
+    }
+
     // ── 카드 선택 → 타겟 흐름 ───────────────────────────
 
     private void HandleCardSelected(CardData card)
     {
         if (player == null) return;
         slotGridUI.BeginTargeting(card, player, slotSystem);
-        waitingForTarget = !card.isAoe;
+
+        // 논타겟 카드(AoE·autoTarget)는 BeginTargeting에서 이미 발동됐다 — 클릭을 기다리지 않는다
+        waitingForTarget = !card.isAoe && !card.autoTarget && !card.targetSelf;
     }
 
     private void HandleTargetSelected(CardData card, CombatEntity user, CombatEntity target)

@@ -13,16 +13,18 @@ MonoBehaviour:
   m_Name: "Card_\uD0C0\uACA9"
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: "\uD0C0\uACA9"
-  description: "\uC801\uC5D0\uAC8C 6 \uD53C\uD574\uB97C \uC900\uB2E4."
+  description: "\uAC00\uC7A5 \uC55E\uC5D0 \uC788\uB294 \uC801\uC5D0\uAC8C 6 \uD53C\uD574\uB97C \uC900\uB2E4."
   artwork: {fileID: 0}
   cardType: 0
-  rangeType: 0
+  rangeType: 1
   classTag: 0
   energyCost: 1
-  useableSlots: 3
-  targetSlots: 3
+  useableSlots: 15
+  targetSlots: 15
   targetAlly: 0
   isAoe: 0
+  autoTarget: 1
+  targetMode: 10
   effects:
   - type: 0
     value: 6

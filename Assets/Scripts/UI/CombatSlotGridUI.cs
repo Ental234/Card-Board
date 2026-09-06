@@ -143,11 +143,19 @@ public class CombatSlotGridUI : MonoBehaviour
         var validTargets = slotSystem.GetValidTargets(user, card);
         HighlightSlots(validTargets);
 
-        // AoE는 타겟 선택 없이 즉시 발동 — 유효 타겟 그대로 이벤트 발생
-        if (isAoePending)
+        // 논타겟 카드는 고를 게 없으므로 즉시 발동한다.
+        // AoE(회전베기)와 autoTarget(타격) 둘 다 여기로 온다 —
+        // autoTarget은 GetValidTargets가 이미 대상을 하나로 확정해 돌려준다.
+        //
+        // ★ 반드시 한 번만 발화할 것. CombatManager.ResolveTargets는 isAoe면
+        //   targetOverride를 무시하고 유효 타겟 전체를 돌려준다 —
+        //   타겟마다 한 번씩 부르면 카드가 대상 수만큼 중복 발동하고
+        //   에너지도 그만큼 빠져나간다 (적 2명 = 회전베기 2회, 에너지 4).
+        //   대상 확정은 CombatManager가 하므로 여기서는 null을 넘긴다.
+        if (isAoePending || card.autoTarget)
         {
-            foreach (var target in validTargets)
-                OnTargetSelected?.Invoke(card, user, target);
+            if (validTargets.Count > 0)
+                OnTargetSelected?.Invoke(card, user, null);
             CancelTargeting();
         }
     }
