@@ -48,8 +48,18 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
 
     // ── 바인딩 ──────────────────────────────────────────
 
+    // ★ 반드시 이전 점유자의 구독을 먼저 끊는다.
+    //
+    //   Occupant를 덮어쓴 뒤에는 Unbind가 옛 점유자를 찾지 못해 구독이 영원히 남는다.
+    //   그러면 이 슬롯이 다른 유닛을 표시하는 동안에도 옛 유닛의 이벤트가 들어와
+    //   숫자가 남의 값으로 덮어써진다 — 데이터는 멀쩡한데 화면만 틀리는 형태라
+    //   "방어 카드를 썼더니 동료 방어막까지 같이 8이 됐다"처럼 보인다.
+    //
+    //   Rebind()가 SlotSystem.OnSlotsChanged에 걸려 있어 배치·이동·교체마다 재바인딩되고,
+    //   SlotUI는 전투가 끝나도 살아남으므로 구독은 런 내내 누적된다.
     public void Bind(CombatEntity entity)
     {
+        Unsubscribe();
         Occupant = entity;
 
         bool hasUnit = entity != null;
@@ -77,15 +87,21 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
         RefreshStatuses();
     }
 
+    // 구독 해제만 담당한다. Bind와 Unbind가 같은 경로를 타야
+    //  "한쪽만 고쳐서 다시 새는" 일이 없다.
+    private void Unsubscribe()
+    {
+        if (Occupant == null) return;
+
+        Occupant.Stats.OnHpChanged     -= RefreshHp;
+        Occupant.Stats.OnShieldChanged -= RefreshShield;
+        Occupant.Stats.OnKnockedOut    -= HandleKnockedOut;
+        Occupant.Stats.OnStatusChanged -= HandleStatusChanged;
+    }
+
     public void Unbind()
     {
-        if (Occupant != null)
-        {
-            Occupant.Stats.OnHpChanged     -= RefreshHp;
-            Occupant.Stats.OnShieldChanged -= RefreshShield;
-            Occupant.Stats.OnKnockedOut    -= HandleKnockedOut;
-            Occupant.Stats.OnStatusChanged -= HandleStatusChanged;
-        }
+        Unsubscribe();
         Occupant = null;
         emptyRoot?.SetActive(true);
         occupiedRoot?.SetActive(false);
