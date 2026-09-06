@@ -50,6 +50,9 @@ public class CombatManager : MonoBehaviour
         PlaceAllEntities();
         SubscribeEvents();
 
+        // 이전 전투의 손패·버린 더미를 되돌려 온전한 덱으로 시작한다
+        player.DeckManager.ResetForCombat();
+
         foreach (var c in companions) c.OnCombatStart();
 
         // 보스는 스테이지 내내 살아남아 재사용되므로 쿨다운을 반드시 여기서 초기화한다
@@ -807,7 +810,17 @@ public class CombatManager : MonoBehaviour
 
         UnsubscribeEvents();
 
-        foreach (var c in companions) c.OnCombatEnd();
+        // 전투 전용 상태(상태이상·방어막)를 여기서 지운다.
+        // 적·하수인은 전투마다 새로 생성되니 문제가 안 드러나고,
+        // 런을 넘어 살아남는 플레이어와 동료에게만 조용히 쌓인다.
+        // OnCombatEnd(쓰러진 동료 1HP 복귀)보다 뒤에 둔다 — 순서가 반대면 복귀가 지워지지 않지만,
+        // HP를 건드리지 않는 정리를 나중에 두는 편이 읽기 쉽다.
+        foreach (var c in companions)
+        {
+            c.OnCombatEnd();
+            c.Stats.ClearCombatState();
+        }
+        player.Stats.ClearCombatState();
 
         OnCombatEnd?.Invoke(playerWon);
     }

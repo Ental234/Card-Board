@@ -114,6 +114,11 @@ public class GameManager : MonoBehaviour
     public void StartRun(CharacterData characterData)
     {
         CurrentStage = 0;
+
+        // 목록만 비우면 이전 런의 동료 오브젝트가 씬에 그대로 남는다.
+        // 메인 메뉴 경유(씬 리로드)로는 정리되지만, StartRun을 직접 다시 부르는 경로에서는 누적된다.
+        foreach (var c in companions)
+            if (c != null) Destroy(c.gameObject);
         companions.Clear();
         bossMinions.Clear();
 
@@ -122,6 +127,10 @@ public class GameManager : MonoBehaviour
         RelicManager.Instance?.ClearAll();
 
         playerCharacter.Initialize(characterData);
+
+        // 반드시 먼저 해제한다 — EndRun을 거치지 않고 StartRun이 다시 불리면
+        // 구독이 쌓여 런 종료 처리가 두 번 돌아간다
+        playerCharacter.OnRunEnd -= HandlePlayerRunEnd;
         playerCharacter.OnRunEnd += HandlePlayerRunEnd;
 
         StartStage();

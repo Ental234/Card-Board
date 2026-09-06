@@ -39,6 +39,24 @@ public class DeckManager : MonoBehaviour
         Shuffle(drawPile);
     }
 
+    // 전투 시작 시 덱을 원상 복구한다.
+    //
+    // 손패와 버린 더미를 전부 뽑을 더미로 되돌리고 섞는다.
+    // 이게 없으면 이전 전투에서 쓴 카드가 버린 더미에 남은 채 다음 전투가 시작되어
+    // 반쪽 덱으로 싸우게 된다 (드로우가 완전히 멈추지는 않지만 순서가 뒤틀린다).
+    //
+    // 소모(Exhaust) 더미는 일부러 되돌리지 않는다 — 소모는 런 단위로 사라지는 것이다.
+    public void ResetForCombat()
+    {
+        drawPile.AddRange(hand);
+        drawPile.AddRange(discardPile);
+        hand.Clear();
+        discardPile.Clear();
+
+        Shuffle(drawPile);
+        OnHandChanged?.Invoke(hand);
+    }
+
     // ── 턴 흐름 ────────────────────────────────────────
 
     public void StartTurn()

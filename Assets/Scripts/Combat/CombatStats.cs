@@ -45,6 +45,27 @@ public class CombatStats
         duration.Clear();
     }
 
+    // 전투 전용 상태만 지운다 — 상태이상과 방어막.
+    // HP·최대HP·공격력은 런 단위 자원이라 건드리지 않는다.
+    //
+    // 전투가 끝날 때 CombatManager가 플레이어와 동료에게 호출한다.
+    // 이게 없으면 독·취약·방어막이 다음 전투로 그대로 넘어간다 —
+    // 적은 전투마다 새로 생성되니 드러나지 않고, 플레이어와 동료에게만 쌓인다.
+    //
+    // UI가 이벤트로 칩과 숫자를 그리므로, 지우고 끝내지 말고
+    // 지운 항목마다 0을 통지해야 화면에서도 사라진다.
+    public void ClearCombatState()
+    {
+        Shield = 0;
+        OnShieldChanged?.Invoke(0);
+
+        var cleared = new List<StatusEffect>(stacks.Keys);
+        stacks.Clear();
+        duration.Clear();
+        foreach (var status in cleared)
+            OnStatusChanged?.Invoke(status, 0);
+    }
+
     // ── HP ──────────────────────────────────────────────
 
     // ── 피격(Damage) vs 상실(HP Loss) ───────────────────
