@@ -54,15 +54,15 @@ public class RelicManager : MonoBehaviour
         {
             if (effect.trigger != RelicTrigger.Passive) continue;
 
-            if (isPlayer)
-                ApplyPlayerPassive(effect);
-            // 보스 Passive는 추후 BossEntity 스탯 연결 시 확장
+            if (isPlayer) ApplyPlayerPassive(effect);
+            else          ApplyBossPassive(effect);
         }
     }
 
     private void ApplyPlayerPassive(RelicEffect effect)
     {
         var player = GameManager.Instance.Player;
+        if (player == null) return;
 
         switch (effect.effectType)
         {
@@ -70,11 +70,35 @@ public class RelicManager : MonoBehaviour
                 player.Stats.AddBaseAttackBonus(effect.value);
                 break;
 
+            case RelicEffectType.IncreaseMaxHp:
+                player.Stats.AdjustMaxHp(effect.value);
+                break;
+
             case RelicEffectType.IncreaseBoardDice:
                 GameManager.Instance.BoardPhaseManagerRef?.AddDiceBonus(effect.value);
                 break;
+        }
+    }
 
-            // IncreaseMaxHp — CombatStats.AdjustMaxHp() 추후 구현
+    // 보스가 상점에서 선점한 렐릭도 실제로 보스를 강하게 만들어야
+    // "먼저 사가면 손해"라는 긴장감이 성립한다. 적용 안 하면 선점이 그냥 재고만 없애는 셈이다.
+    //
+    // 스탯 계열만 적용한다 — 드로우·에너지·주사위는 플레이어 자원이라 보스에게 뜻이 없다.
+    // 보스는 스테이지마다 새로 생성되므로(StartStage) 보정도 그때 함께 사라진다.
+    private void ApplyBossPassive(RelicEffect effect)
+    {
+        var boss = GameManager.Instance.CurrentBoss;
+        if (boss == null) return;
+
+        switch (effect.effectType)
+        {
+            case RelicEffectType.IncreaseDamage:
+                boss.Stats.AddBaseAttackBonus(effect.value);
+                break;
+
+            case RelicEffectType.IncreaseMaxHp:
+                boss.Stats.AdjustMaxHp(effect.value);
+                break;
         }
     }
 

@@ -22,7 +22,7 @@ public enum RelicEffectType
     HealHp,             // N HP 회복
     GainGold,           // N 골드 획득
     IncreaseDamage,     // 기본 공격력 +N (Passive)
-    IncreaseMaxHp,      // 최대 HP +N (Passive — 추후 CombatStats 확장 시 적용)
+    IncreaseMaxHp,      // 최대 HP +N (Passive) — 현재 HP도 함께 오른다
     IncreaseBoardDice,  // 주사위 +N (Passive, BoardPhaseManager 경유)
 }
 

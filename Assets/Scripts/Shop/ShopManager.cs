@@ -59,27 +59,58 @@ public class ShopManager : MonoBehaviour
 
     // ── 재고 생성 ────────────────────────────────────────
 
+    // ── 재고의 수명 ──────────────────────────────────────
+    //
+    // 렐릭 섹션만 **플레이어와 보스가 공유**한다. 그래서 렐릭은 한 번 뽑으면 유지하고,
+    // 나머지(카드·포션·동료·보스아이템)는 플레이어가 상점을 열 때마다 새로 뽑는다.
+    //
+    // ★ 렐릭을 매번 새로 뽑으면 선점이 성립하지 않는다 —
+    //   보스가 사간 뒤 플레이어가 상점을 열면 재고가 되살아나 "먼저 사갔다"가 없던 일이 된다.
+    //
+    // 재고는 스테이지가 바뀔 때 ResetStock()으로 비운다.
+
     // 플레이어가 상점 칸에 착지할 때 호출
     public void OpenShop(ClassTag playerClassTag)
     {
         playerClass = playerClassTag;
         bossRelicPurchasesThisVisit = 0;
 
-        RefreshInventory();
+        EnsureSharedStock();
+        RefreshPlayerStock();
         OnShopRefreshed?.Invoke();
     }
 
-    // 보스가 상점 칸에 착지할 때 호출 (재고는 동일, 보스 AI 구매만 실행)
+    // 보스가 상점 칸에 착지할 때 호출 (재고 공유, 보스 AI 구매만 실행)
     public void BossVisitShop()
     {
         bossRelicPurchasesThisVisit = 0;
+
+        EnsureSharedStock();
         BossAiBuyRelics();
+        OnShopRefreshed?.Invoke();   // 플레이어가 상점을 보고 있다면 팔린 표시를 갱신한다
     }
 
-    private void RefreshInventory()
+    // 스테이지 전환 시 호출 — 다음 스테이지는 새 재고로 시작한다
+    public void ResetStock()
     {
         Cards.Clear();
         Relics.Clear();
+        Potions.Clear();
+        Companions.Clear();
+        BossItems.Clear();
+    }
+
+    // 공유 재고(렐릭) — 비어 있을 때만 뽑는다. 이미 있으면 보스가 사간 흔적을 그대로 둔다.
+    private void EnsureSharedStock()
+    {
+        if (Relics.Count > 0) return;
+        FillSlots(Relics, allRelicPool, relicSlots, relicBasePrice);
+    }
+
+    // 플레이어 전용 재고 — 방문할 때마다 새로 뽑는다
+    private void RefreshPlayerStock()
+    {
+        Cards.Clear();
         Potions.Clear();
         Companions.Clear();
         BossItems.Clear();
@@ -89,7 +120,6 @@ public class ShopManager : MonoBehaviour
             c.classTag == playerClass || c.classTag == ClassTag.Universal);
         FillSlots(Cards, filteredCards, cardSlots, cardBasePrice);
 
-        FillSlots(Relics,     allRelicPool,     relicSlots,     relicBasePrice);
         FillSlots(Potions,    allPotionPool,    potionSlots,    potionBasePrice);
         FillSlots(Companions, allCompanionPool, companionSlots, companionBasePrice);
         FillSlots(BossItems,  allBossItemPool,  bossItemSlots,  bossItemBasePrice);
@@ -131,13 +161,19 @@ public class ShopManager : MonoBehaviour
         return true;
     }
 
+    // 포션은 덱이 아니라 소지품으로 간다.
+    // 소지 상한 검사를 골드 차감 **앞**에 둔다 — 순서가 반대면 가득 찬 상태에서
+    // 돈만 나가고 포션은 안 들어온다.
     public bool TryBuyPotion(ShopItem<CardData> item)
     {
         if (item.sold) return false;
+
+        var potions = GameManager.Instance.Player.PotionManager;
+        if (potions.IsFull) return false;
+
         if (!GameManager.Instance.SpendPlayerGold(item.price)) return false;
 
-        // 포션 즉시 사용 or 인벤토리 보관 — 추후 PotionManager 연결
-        GameManager.Instance.Player.DeckManager.AddCard(item.data);
+        potions.TryAdd(item.data);
         item.sold = true;
         return true;
     }

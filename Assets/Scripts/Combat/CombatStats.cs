@@ -154,6 +154,23 @@ public class CombatStats
     }
 
     // 렐릭 등 외부 효과로 기본 공격력 보정
+    // 최대 HP 증감 (렐릭 Passive · 이벤트 보상/대가).
+    //
+    // 양수면 **현재 HP도 같이 올린다** — 최대치만 늘고 빈 껍데기가 되면 보상으로 체감되지 않는다.
+    // 음수면 최대치를 줄이되 **최대 HP 감소만으로 쓰러지지는 않는다**(최소 1 보장).
+    // 최대 HP를 깎는 대가가 곧 사망이면 그 이벤트를 아무도 고르지 않는다.
+    public void AdjustMaxHp(int delta)
+    {
+        if (delta == 0) return;
+
+        MaxHp = Mathf.Max(1, MaxHp + delta);
+
+        if (delta > 0) CurrentHp += delta;
+        CurrentHp = Mathf.Clamp(CurrentHp, 1, MaxHp);
+
+        OnHpChanged?.Invoke(CurrentHp, MaxHp);
+    }
+
     public void AddBaseAttackBonus(int amount)
     {
         BaseAttack += amount;

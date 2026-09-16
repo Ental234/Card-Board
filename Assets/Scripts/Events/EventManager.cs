@@ -105,6 +105,10 @@ public class EventManager : MonoBehaviour
                 break;
 
             case EventEffectType.MaxHpChange:
+                // 최대 HP 감소만으로는 쓰러지지 않는다 (CombatStats.AdjustMaxHp가 최소 1 보장)
+                player.Stats.AdjustMaxHp(effect.value);
+                break;
+
             case EventEffectType.Nothing:
                 break;
         }

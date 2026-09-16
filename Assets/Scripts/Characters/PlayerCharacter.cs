@@ -17,8 +17,13 @@ public class PlayerCharacter : CombatEntity
     [SerializeField] private DeckManager      deckManager;
     [SerializeField] private BoardCardManager boardCardManager;
 
+    // 포션은 덱이 아니라 소지품에 담긴다. CombatStats처럼 순수 C# 객체라
+    // 씬에 컴포넌트를 붙이지 않는다.
+    private readonly PotionManager potionManager = new();
+
     public DeckManager      DeckManager      => deckManager;
     public BoardCardManager BoardCardManager => boardCardManager;
+    public PotionManager    PotionManager    => potionManager;
 
     // ── 초기화 ──────────────────────────────────────────
 
@@ -39,6 +44,7 @@ public class PlayerCharacter : CombatEntity
 
         deckManager.InitDeck(data.startingCombatCards);
         boardCardManager.InitDeck(data.startingBoardCards);
+        potionManager.Clear();   // 포션도 런 단위 — 이전 런의 소지품이 넘어오지 않는다
     }
 
     // ── 보드 페이즈 ─────────────────────────────────────

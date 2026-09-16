@@ -518,6 +518,40 @@ public class CombatManager : MonoBehaviour
         return true;
     }
 
+    // ── 포션 사용 ────────────────────────────────────────
+
+    // 포션은 카드와 달리 **에너지를 쓰지 않고 덱을 거치지 않는다.**
+    // 손패에 뭐가 잡혔든 상관없이 쓸 수 있다는 것이 포션의 존재 이유다.
+    //
+    // 효과 실행과 타겟 규칙은 카드와 똑같이 ResolveTargets / ExecuteEffect를 탄다 —
+    // 포션을 CardData로 저작하는 이유가 이것이다.
+    public bool TryUsePotion(CardData potion, CombatEntity targetOverride = null)
+    {
+        if (!playerTurnActive || potion == null || player == null) return false;
+
+        var potions = player.PotionManager;
+        if (!potions.Has(potion)) return false;
+
+        // 카드와 같은 순서 — 타겟을 먼저 확정해야 포션만 소모되는 일이 없다
+        var targets = ResolveTargets(potion, player, targetOverride);
+        if (targets == null || targets.Count == 0) return false;
+
+        potions.Remove(potion);
+
+        foreach (var effect in potion.effects)
+            foreach (var target in targets)
+                ExecuteEffect(effect, player, target);
+
+        // 포션도 플레이어 본인의 행동이므로 반응형 동료를 깨운다.
+        // 빼면 "공격 물약에는 반격 동료가 반응하지 않는" 비대칭이 생긴다.
+        var reaction = GetReactionTiming(potion);
+        if (reaction != TriggerTiming.None)
+            RunCompanionPatternsImmediate(reaction);
+
+        RefreshIntentPreviews();
+        return true;
+    }
+
     // 카드가 어떤 종류의 행동인지 판정한다.
     // 피해와 방어막을 함께 가진 카드는 '공격'으로 친다 (규칙을 단순하게 유지).
     private TriggerTiming GetReactionTiming(CardData card)

@@ -170,11 +170,20 @@
   · `GetUnlockedCards / GetUnlockedCharacters / GetUnlockedStartingRelics` **호출처 없음**
   → 메타 포인트는 쌓이는데 해금되는 게 아무것도 없다
 - [ ] **`CharacterData.startingRelic` 미적용** — 필드는 있는데 `PlayerCharacter.Initialize`가 무시
-- [ ] **보스 상점 선점 타이밍 버그**
-  `BossAiBuyRelics()`가 `OpenShop()` 안에서 호출됨 → **플레이어가 상점을 열 때** 보스가 산다.
-  GDD는 보스가 상점 칸에 착지했을 때 사는 구조 (`HandleBossLanded`는 현재 아무것도 안 함)
-- [ ] **포션 시스템** — `ShopManager.TryBuyPotion`이 `DeckManager.AddCard`를 호출해
-  포션이 그냥 덱에 섞인다. 전투 중 임의 사용하는 소비 아이템으로 분리 필요
+- [x] **보스 상점 선점** — 완료. `HandleBossLanded`가 상점 칸에서 `BossVisitShop()`을 부른다.
+  · **진짜 문제는 재고의 수명이었다.** 타이밍만 옮겨도 `OpenShop`이 매번 재고를 새로 뽑아서
+    보스가 사간 흔적이 지워졌다 — 선점이 없던 일이 된다
+  · **렐릭 섹션만 공유 재고**라 한 번 뽑으면 유지하고(`EnsureSharedStock`),
+    카드·포션·동료는 플레이어 방문마다 새로 뽑는다(`RefreshPlayerStock`)
+  · 재고는 스테이지 단위 — `StartStage`에서 `ResetStock()`으로 비운다
+- [x] **포션 시스템** — 완료. `PotionManager`(순수 C# 객체)를 `PlayerCharacter`가 소유한다.
+  · **포션은 `CardData`로 계속 저작한다.** 효과 실행기(`ExecuteEffect`)와 타겟 규칙을
+    카드와 그대로 공유하기 위해서다. 카드와 다른 점은 "어디에 담기느냐"뿐이다
+  · 소지 상한 3(`SetCapacity`로 렐릭 확장 가능). **상한 검사는 골드 차감보다 앞에** —
+    순서가 반대면 가득 찬 상태에서 돈만 나간다
+  · `CombatManager.TryUsePotion` — 에너지를 쓰지 않고 덱을 거치지 않는다.
+    반응형 동료는 카드와 똑같이 깨운다 (빼면 "공격 물약엔 반격 동료가 안 붙는" 비대칭이 생긴다)
+  · `PotionBarUI` — 인텐트 배지와 같은 **런타임 생성**. 아트가 나오면 `PotionLabel`·색 상수만 교체
 - [ ] **등급(Rarity) 시스템**
   `Rarity { Common, Uncommon, Rare, Unique }` + 가중 추첨 + 등급별 가격.
   현재 상점·보상이 완전 무작위라 `타격`과 `강타`가 동일 확률.
@@ -190,8 +199,13 @@
 - [ ] 슬롯 설치 아이템 (GDD 7장 — 빈 슬롯에 설치해 패시브 획득). `isImmobile` 기반으로 구현 가능
 - [ ] 카드 업그레이드 (휴식 노드의 "카드 1장 업그레이드" — 현재 회복만)
 - [ ] 소모(Exhaust) 카드 — `DeckManager.ExhaustCard`는 있는데 쓰는 카드가 없음
-- [ ] `RelicEffectType.IncreaseMaxHp` / `EventEffectType.MaxHpChange` 미구현 (`CombatStats.AdjustMaxHp` 필요)
-- [ ] 보스 Passive 렐릭 미적용 (`RelicManager.ApplyPassives`가 플레이어만 처리)
+- [x] `RelicEffectType.IncreaseMaxHp` / `EventEffectType.MaxHpChange` — 완료. `CombatStats.AdjustMaxHp` 추가.
+  양수면 **현재 HP도 같이 올린다**(최대치만 늘면 보상으로 체감되지 않는다).
+  음수면 **최소 1을 보장한다** — 최대 HP를 깎는 대가가 곧 사망이면 그 이벤트를 아무도 고르지 않는다
+- [x] 보스 Passive 렐릭 — 완료. `ApplyBossPassive` 추가.
+  **스탯 계열(`IncreaseDamage`/`IncreaseMaxHp`)만** 적용한다 —
+  드로우·에너지·주사위는 플레이어 자원이라 보스에게 뜻이 없다.
+  보스는 스테이지마다 새로 생성되므로 보정도 그때 함께 사라진다
 - [ ] 캐릭터 2종 추가 (마법사·도적) — 현재 전사 1종
 - [ ] 저주 카드 에셋 (저주 노드가 카드 대신 HP만 깎는 중)
 

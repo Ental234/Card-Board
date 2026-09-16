@@ -141,6 +141,10 @@ public class GameManager : MonoBehaviour
         bossMinions.Clear();
         isBossEncounter = false;   // 이전 스테이지의 보스전 상태가 남지 않도록
 
+        // 상점 재고는 스테이지 단위 — 새 스테이지는 새 재고로 시작한다.
+        // (렐릭 섹션은 스테이지 안에서 유지되어야 보스 선점이 성립하므로 여기서만 비운다)
+        ShopManager.Instance?.ResetStock();
+
         // 보스 초기화
         if (currentBoss != null)
             Destroy(currentBoss.gameObject);
@@ -251,7 +255,13 @@ public class GameManager : MonoBehaviour
     private void HandleBossLanded(int nodeIndex, NodeType type)
     {
         OnBossNodeEvent?.Invoke(nodeIndex, type);
-        // 상점 방문 등 추가 처리는 ShopManager 등 구독자가 담당
+
+        // 보스는 **상점 칸에 착지한 그 순간** 산다.
+        // 예전에는 아무도 BossVisitShop을 부르지 않아 보스가 상점을 아예 쓰지 않았고,
+        // 그 전에는 플레이어가 상점을 열 때 보스 구매가 함께 돌아
+        // "먼저 도착한 쪽이 선점한다"는 규칙이 성립하지 않았다.
+        if (type == NodeType.Shop)
+            ShopManager.Instance?.BossVisitShop();
     }
 
     private void HandleBossAcquiresMinion(MinionData minionData)
