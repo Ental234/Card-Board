@@ -147,4 +147,8 @@ public class RelicManager : MonoBehaviour
         playerRelics.Clear();
         bossRelics.Clear();
     }
+
+    // 보스 렐릭은 보스 **객체**에 귀속된다. 스테이지마다 보스가 새 객체이므로 목록도 새로 시작한다.
+    // (스탯 보정은 이미 옛 보스 객체에만 적용돼 있어 따로 되돌릴 것이 없다)
+    public void ClearBossRelics() => bossRelics.Clear();
 }

@@ -27,6 +27,9 @@ public class CombatPanel : MonoBehaviour
     // 둘 다 CardData라 슬롯 클릭만 보고는 알 수 없다.
     private CardData pendingPotion;
 
+    // 조우 전투 남은 턴 — 턴 제한이 있는 전투에서만 보인다 (런타임 생성)
+    private TextMeshProUGUI roundText;
+
     // ── 활성화 ──────────────────────────────────────────
 
     private void OnEnable()
@@ -94,6 +97,7 @@ public class CombatPanel : MonoBehaviour
         potionBar?.Unbind();
         pendingPotion = null;
         endTurnButton.interactable = false;
+        if (roundText != null) roundText.gameObject.SetActive(false);
 
         if (player == null) return;
         player.DeckManager.OnHandChanged   -= OnHandChanged;
@@ -108,6 +112,54 @@ public class CombatPanel : MonoBehaviour
     {
         bool isPlayerTurn = entity is PlayerCharacter;
         endTurnButton.interactable = isPlayerTurn;
+
+        if (isPlayerTurn) RefreshRoundText();
+    }
+
+    // 조우 전투는 2턴에 끊긴다. 남은 턴이 안 보이면 버스트를 언제 쏟을지 판단할 수 없다.
+    private void RefreshRoundText()
+    {
+        if (combatManager.TurnLimit <= 0)
+        {
+            if (roundText != null) roundText.gameObject.SetActive(false);
+            return;
+        }
+
+        EnsureRoundText();
+        if (roundText == null) return;
+
+        roundText.gameObject.SetActive(true);
+        bool lastRound = combatManager.CurrentRound >= combatManager.TurnLimit;
+        roundText.text  = lastRound
+                        ? $"조우 전투 {combatManager.CurrentRound}/{combatManager.TurnLimit}턴 - 마지막 턴"
+                        : $"조우 전투 {combatManager.CurrentRound}/{combatManager.TurnLimit}턴";
+        roundText.color = lastRound ? new Color(1f, 0.55f, 0.35f) : new Color(1f, 0.9f, 0.6f);
+    }
+
+    private void EnsureRoundText()
+    {
+        if (roundText != null || endTurnButton == null) return;
+
+        var go = new GameObject("RoundText", typeof(RectTransform));
+        go.transform.SetParent(endTurnButton.transform.parent, false);
+
+        var btnRt = endTurnButton.GetComponent<RectTransform>();
+        var rt    = go.GetComponent<RectTransform>();
+        rt.anchorMin        = btnRt.anchorMin;
+        rt.anchorMax        = btnRt.anchorMax;
+        rt.pivot            = new Vector2(0.5f, 0f);
+        rt.sizeDelta        = new Vector2(320f, 32f);
+        rt.anchoredPosition = btnRt.anchoredPosition + new Vector2(0f, btnRt.rect.height * (1f - btnRt.pivot.y) + 8f);
+
+        roundText = go.AddComponent<TextMeshProUGUI>();
+        roundText.alignment     = TextAlignmentOptions.Center;
+        roundText.fontSize      = 22;
+        roundText.raycastTarget = false;
+        if (energyText != null)
+        {
+            roundText.font               = energyText.font;
+            roundText.fontSharedMaterial = energyText.fontSharedMaterial;
+        }
     }
 
     private void OnEndTurnClicked()

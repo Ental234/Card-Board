@@ -19,9 +19,8 @@ MonoBehaviour:
   baseAttack: 16
   bossSlot: 4
   maxActionPoints: 0
-  baseMoveDistance: 3
+  moveStyle: 0
   panicHpThreshold: 0.4
-  panicTurnThreshold: 18
   phaseThresholds:
   - 0.6
   - 0.3

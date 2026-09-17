@@ -3,11 +3,15 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// 보드 그래프 시각화
+// 보드 그래프 시각화 (v0.6 — 스테이지 전체를 세로로)
 //
-// 배치 전략: 본선(메인 루프)은 원 위에 균등 배치하고,
-//            우회 분기는 갈라진 지점과 합류 지점 사이를 바깥쪽으로 부풀린 호에 배치한다.
-//            간선을 선분으로 그려 교차로가 눈에 보이게 한다.
+// 배치 전략: 스테이지 전체를 **아래에서 위로** 한 번에 펼친다.
+//   맨 아래 = 시작 칸, 구획마다 위로 쌓이고 맨 위 = 최종 결전
+//   조우지점은 가운데 세로축, 왼쪽 = 플레이어 트랙, 오른쪽 = 보스 트랙
+//   노드의 y는 생성기가 심어 둔 진행도(progress), x는 갈래(lane)에서 나온다.
+// 아직 열리지 않은 구획은 어둡게 가린다. 구획이 열리면 서서히 드러난다 (나중에 안개 연출로 교체).
+// 한 화면에 다 안 들어가므로 맵 루트를 위아래로 움직여 말을 따라간다 (휠로 직접 훑어볼 수도 있다).
+// 격자에 맞추지 않는다 — 좌표 규칙은 GetNodePosition 하나로만 외부에 노출한다.
 public class BoardMapView : MonoBehaviour
 {
     [SerializeField] private BoardPhaseManager boardPhaseManager;
@@ -15,8 +19,20 @@ public class BoardMapView : MonoBehaviour
     [Header("노드")]
     [SerializeField] private GameObject    nodePrefab;
     [SerializeField] private RectTransform mapRoot;
-    [SerializeField] private float         mapRadius    = 300f;
-    [SerializeField] private float         branchOffset = 90f;   // 분기를 바깥으로 밀어내는 거리
+
+    // 필드 이름을 가로 배치 때와 다르게 둔다 — 같은 이름이면 씬에 저장된 옛 값이 코드 기본값을 덮는다
+    [Header("세로 배치")]
+    [SerializeField] private float rowStep        = 52f;    // 진행 한 칸의 세로 간격
+    [SerializeField] private float trackOffsetX   = 110f;   // 가운데 축에서 첫 갈래까지
+    [SerializeField] private float laneGapX       = 120f;   // 갈래 사이 가로 간격
+    [SerializeField] private float nodeScale      = 0.75f;
+    [SerializeField] private float encounterScale = 1.5f;
+
+    [Header("스크롤")]
+    [SerializeField] private float focusBias    = -120f;  // 따라가는 말을 화면 중앙보다 얼마나 아래에 둘지
+    [SerializeField] private float followSpeed  = 6f;
+    [SerializeField] private float wheelSpeed   = 90f;
+    [SerializeField] private float viewportTopInset = 100f;   // HUD(골드·스테이지 표시)를 가리지 않도록 위를 비운다
 
     [Header("간선")]
     [SerializeField] private Color edgeColor     = new(0.45f, 0.42f, 0.38f);
@@ -27,169 +43,262 @@ public class BoardMapView : MonoBehaviour
     [SerializeField] private RectTransform bossIcon;
 
     [Header("노드 타입 색상")]
-    [SerializeField] private Color monsterColor  = new(0.80f, 0.30f, 0.30f);
-    [SerializeField] private Color eliteColor    = new(0.80f, 0.20f, 0.20f);
-    [SerializeField] private Color eventColor    = new(0.40f, 0.60f, 0.80f);
-    [SerializeField] private Color shopColor     = new(0.80f, 0.75f, 0.30f);
-    [SerializeField] private Color restColor     = new(0.30f, 0.75f, 0.40f);
-    [SerializeField] private Color treasureColor = new(0.85f, 0.65f, 0.20f);
-    [SerializeField] private Color curseColor    = new(0.50f, 0.20f, 0.60f);
-    [SerializeField] private Color salaryColor   = new(0.90f, 0.80f, 0.40f);
-    [SerializeField] private Color emptyColor    = new(0.50f, 0.50f, 0.50f);
-    [SerializeField] private Color startColor    = new(0.30f, 0.90f, 0.90f);
+    [SerializeField] private Color monsterColor   = new(0.80f, 0.30f, 0.30f);
+    [SerializeField] private Color eliteColor     = new(0.80f, 0.20f, 0.20f);
+    [SerializeField] private Color eventColor     = new(0.40f, 0.60f, 0.80f);
+    [SerializeField] private Color shopColor      = new(0.80f, 0.75f, 0.30f);
+    [SerializeField] private Color restColor      = new(0.30f, 0.75f, 0.40f);
+    [SerializeField] private Color treasureColor  = new(0.85f, 0.65f, 0.20f);
+    [SerializeField] private Color curseColor     = new(0.50f, 0.20f, 0.60f);
+    [SerializeField] private Color encounterColor = new(0.95f, 0.95f, 0.95f);
+    [SerializeField] private Color emptyColor     = new(0.50f, 0.50f, 0.50f);
+    [SerializeField] private Color startColor     = new(0.30f, 0.90f, 0.90f);
 
-    private readonly List<GameObject> spawned   = new();   // 노드·간선 전부
-    private Vector2[]                 positions;           // 노드 인덱스 → 화면 좌표
+    [Header("트랙 구분")]
+    [Range(0f, 1f)]
+    [SerializeField] private float bossTrackDim = 0.6f;   // 보스 트랙 노드를 어둡게 — 내가 밟을 수 없는 길
+    [Range(0f, 1f)]
+    [SerializeField] private float visitedDim   = 0.45f;  // 지나온 노드·지나간 구획
+
+    [Header("열리지 않은 구획")]
+    [SerializeField] private Color hiddenColor = new(0.10f, 0.10f, 0.12f);
+    [SerializeField] private float revealTime  = 0.9f;
+
+    // ── 런타임 상태 ─────────────────────────────────────
+
+    private class NodeView
+    {
+        public NodeData        node;
+        public Image           image;
+        public TextMeshProUGUI label;
+    }
+
+    private class EdgeView
+    {
+        public Image image;
+        public int   section;   // 이 구획이 열려야 보인다
+    }
+
+    private readonly List<GameObject>         spawned   = new();   // 노드·간선 전부
+    private readonly Dictionary<int, Vector2> positions = new();   // 노드 인덱스 → 맵 루트 기준 좌표
+    private readonly List<NodeView>           nodeViews = new();
+    private readonly List<EdgeView>           edgeViews = new();
+
+    [System.NonSerialized] private float[] sectionReveal;   // 구획별 드러난 정도 0~1
+    [System.NonSerialized] private int     builtVersion = -1;
+
+    private Vector2 rootBasePos;
+    private bool    rootBaseCaptured;
+    [System.NonSerialized] private RectTransform panelRoot;   // 보드 패널 — 상태 텍스트·보급 메뉴가 붙는 곳
+    private float   scrollY;          // 지금 화면 중앙에 오는 맵 좌표 y
+    private float   scrollTargetY;
+    private float   maxFocusY;
+
+    // 진행도 표시 (런타임 생성 — 직렬화되면 가짜 참조가 남으므로 NonSerialized)
+    [System.NonSerialized] private TextMeshProUGUI statusText;
+    [System.NonSerialized] private TextMeshProUGUI logText;
+    private int   lastBossRoll;
+    private int   revealedBossRoll;
+    private float logClearTime;
 
     private void OnEnable()
     {
-        boardPhaseManager.OnDiceRolled   += OnDiceRolled;
-        boardPhaseManager.OnPlayerLanded += OnPlayerLanded;
-        boardPhaseManager.OnBossLanded   += OnBossLanded;
+        boardPhaseManager.OnPositionsChanged  += OnPositionsChanged;
+        boardPhaseManager.OnSectionChanged    += OnSectionChanged;
+        boardPhaseManager.OnBossDiceRolled    += OnBossDiceRolled;
+        boardPhaseManager.OnBossDiceRevealed  += OnBossDiceRevealed;
+        boardPhaseManager.OnEncounterLog      += ShowLog;
     }
 
     private void OnDisable()
     {
-        boardPhaseManager.OnDiceRolled   -= OnDiceRolled;
-        boardPhaseManager.OnPlayerLanded -= OnPlayerLanded;
-        boardPhaseManager.OnBossLanded   -= OnBossLanded;
+        boardPhaseManager.OnPositionsChanged  -= OnPositionsChanged;
+        boardPhaseManager.OnSectionChanged    -= OnSectionChanged;
+        boardPhaseManager.OnBossDiceRolled    -= OnBossDiceRolled;
+        boardPhaseManager.OnBossDiceRevealed  -= OnBossDiceRevealed;
+        boardPhaseManager.OnEncounterLog      -= ShowLog;
     }
 
-    private void OnDiceRolled(int _)                => RefreshIcons();
-    private void OnPlayerLanded(int _, NodeType __) => RefreshIcons();
-    private void OnBossLanded(int _, NodeType __)   => RefreshIcons();
+    private void Update()
+    {
+        if (logText != null && !string.IsNullOrEmpty(logText.text) && Time.time >= logClearTime)
+            logText.text = "";
 
-    // ── 맵 생성 (BoardPhaseManager.InitBoard 이후 호출) ─
+        if (positions.Count == 0) return;
+
+        AnimateReveal();
+        UpdateScroll();
+    }
+
+    private void OnPositionsChanged()
+    {
+        if (builtVersion != boardPhaseManager.BoardVersion) { BuildMap(); return; }
+
+        RefreshNodeTint();
+        RefreshIcons();
+        RefreshStatus();
+        FocusOn(boardPhaseManager.PlayerPosition);
+    }
+
+    // 구획이 열렸다 — 다시 짓지 않는다. AnimateReveal이 서서히 드러낸다 (안개 연출이 여기 붙는다)
+    private void OnSectionChanged(int _)
+    {
+        if (builtVersion != boardPhaseManager.BoardVersion) return;   // 새 스테이지는 BuildMap이 처리
+        RefreshStatus();
+        FocusOn(boardPhaseManager.PlayerPosition);
+    }
+
+    private void OnBossDiceRolled(int value)
+    {
+        lastBossRoll     = value;
+        revealedBossRoll = 0;
+        RefreshStatus();
+    }
+
+    private void OnBossDiceRevealed(int value)
+    {
+        revealedBossRoll = value;
+        RefreshStatus();
+    }
+
+    // ── 맵 생성 ─────────────────────────────────────────
+    //
+    // 보드 페이즈로 돌아올 때마다 UIManager가 부른다. 같은 보드면 다시 짓지 않는다 —
+    // 다시 지으면 드러내기 연출이 되풀이되고 스크롤 위치가 튄다.
 
     public void BuildMap()
     {
+        CaptureRootBase();
+        EnsureStatusTexts();
+
+        if (boardPhaseManager.TotalNodes == 0) return;
+
+        if (builtVersion == boardPhaseManager.BoardVersion && positions.Count > 0)
+        {
+            RefreshNodeTint();
+            RefreshIcons();
+            RefreshStatus();
+            FocusOn(boardPhaseManager.PlayerPosition, instant: true);
+            return;
+        }
+
         Clear();
+        builtVersion = boardPhaseManager.BoardVersion;
 
-        int total = boardPhaseManager.TotalNodes;
-        if (total == 0) return;
+        Layout();
+        DrawEdges();
+        DrawNodes();
+        AttachIcons();
 
-        positions = new Vector2[total];
+        // 새 스테이지 — 지금 구획까지만 열린 상태로 시작한다
+        sectionReveal = new float[Mathf.Max(1, boardPhaseManager.SectionCount)];
+        for (int s = 0; s < sectionReveal.Length; s++)
+            sectionReveal[s] = s <= boardPhaseManager.CurrentSection ? 1f : 0f;
 
-        var mainRing = TraceMainRing(total);
-        LayoutMain(mainRing);
-        LayoutBranches(mainRing, total);
-
-        DrawEdges(total);
-        DrawNodes(total);
-
+        RefreshNodeTint();
         RefreshIcons();
+        RefreshStatus();
+        FocusOn(boardPhaseManager.PlayerPosition, instant: true);
     }
+
+    // 맵이 한 화면보다 길어 스크롤하므로, 잘라낼 뷰포트(RectMask2D) 안으로 맵 루트를 옮긴다.
+    // 씬을 건드리지 않고 런타임에 만든다 (프리팹·씬 오버라이드 함정 회피).
+    private void CaptureRootBase()
+    {
+        if (rootBaseCaptured || mapRoot == null) return;
+
+        panelRoot = mapRoot.parent as RectTransform;
+
+        var viewportGo = new GameObject("MapViewport", typeof(RectTransform));
+        var viewport   = viewportGo.GetComponent<RectTransform>();
+        viewport.SetParent(panelRoot, false);
+        viewport.SetSiblingIndex(mapRoot.GetSiblingIndex());
+        viewport.anchorMin = Vector2.zero;
+        viewport.anchorMax = Vector2.one;
+        viewport.offsetMin = Vector2.zero;
+        viewport.offsetMax = new Vector2(0f, -viewportTopInset);
+        viewportGo.AddComponent<RectMask2D>();
+
+        mapRoot.SetParent(viewport, worldPositionStays: true);
+
+        rootBasePos      = mapRoot.anchoredPosition;
+        rootBaseCaptured = true;
+    }
+
+    // 맵 루트는 뷰포트 안으로 옮겨지므로, 화면에 고정돼야 하는 UI는 이 패널에 붙인다
+    public RectTransform PanelRoot => panelRoot != null ? panelRoot : mapRoot.parent as RectTransform;
 
     // ── 배치 ────────────────────────────────────────────
 
-    // 0번에서 첫 출구만 따라가며 본선 루프 순서를 복원한다.
-    private List<int> TraceMainRing(int total)
+    private void Layout()
     {
-        var ring    = new List<int>();
-        var visited = new bool[total];
-        int cur     = 0;
+        positions.Clear();
 
-        while (cur >= 0 && cur < total && !visited[cur])
+        int sections = Mathf.Max(1, boardPhaseManager.SectionCount);
+
+        // 구획 높이는 그 구획의 가장 긴 갈래에 맞춘다 — 짧은 갈래는 노드 간격이 넓어진다
+        var longest = new int[sections];
+        var counts  = new Dictionary<(int, BoardTrack, int), int>();
+        for (int i = 0; i < boardPhaseManager.TotalNodes; i++)
         {
-            visited[cur] = true;
-            ring.Add(cur);
+            var n = boardPhaseManager.GetNode(i);
+            if (n == null || n.track == BoardTrack.Shared) continue;
 
-            var exits = boardPhaseManager.GetNode(cur).exits;
-            cur = exits.Count > 0 ? exits[0] : -1;
+            var key = (n.section, n.track, n.lane);
+            counts[key] = counts.TryGetValue(key, out int c) ? c + 1 : 1;
+            longest[n.section] = Mathf.Max(longest[n.section], counts[key]);
         }
 
-        return ring;
-    }
+        var baseY = new float[sections + 1];
+        for (int s = 0; s < sections; s++)
+            baseY[s + 1] = baseY[s] + rowStep * (longest[s] + 1);
 
-    private void LayoutMain(List<int> ring)
-    {
-        for (int i = 0; i < ring.Count; i++)
-            positions[ring[i]] = PointOnCircle(AngleAt(i, ring.Count), mapRadius);
-    }
-
-    // 본선에 속하지 않은 노드 = 분기. 갈라진 곳과 합류하는 곳 사이 바깥쪽에 늘어놓는다.
-    private void LayoutBranches(List<int> ring, int total)
-    {
-        var ringIndex = new Dictionary<int, int>();
-        for (int i = 0; i < ring.Count; i++) ringIndex[ring[i]] = i;
-
-        foreach (int split in ring)
+        for (int i = 0; i < boardPhaseManager.TotalNodes; i++)
         {
-            var exits = boardPhaseManager.GetNode(split).exits;
-            if (exits.Count < 2) continue;              // 교차로가 아님
+            var n = boardPhaseManager.GetNode(i);
+            if (n == null) continue;
 
-            for (int e = 1; e < exits.Count; e++)       // 0번은 본선
+            if (n.type == NodeType.Start)
             {
-                var chain = TraceBranch(exits[e], ringIndex, out int rejoin);
-                if (chain.Count == 0) continue;
-
-                PlaceBranchChain(chain, ringIndex[split],
-                                 ringIndex.TryGetValue(rejoin, out int r) ? r : ringIndex[split],
-                                 ring.Count);
+                positions[i] = Vector2.zero;
+            }
+            else if (n.IsEncounter)
+            {
+                positions[i] = new Vector2(0f, baseY[n.section + 1]);
+            }
+            else
+            {
+                float y    = Mathf.Lerp(baseY[n.section], baseY[n.section + 1], n.progress);
+                float dist = trackOffsetX + n.lane * laneGapX;
+                positions[i] = new Vector2(n.track == BoardTrack.Player ? -dist : dist, y);
             }
         }
+
+        maxFocusY = baseY[sections];
     }
-
-    // 분기 시작 노드부터 본선에 합류할 때까지의 노드 목록
-    private List<int> TraceBranch(int start, Dictionary<int, int> ringIndex, out int rejoin)
-    {
-        var chain = new List<int>();
-        int cur   = start;
-        rejoin    = start;
-
-        // 분기 길이는 짧지만 안전을 위해 상한을 둔다
-        for (int guard = 0; guard < 32; guard++)
-        {
-            if (ringIndex.ContainsKey(cur)) { rejoin = cur; break; }
-
-            chain.Add(cur);
-            var exits = boardPhaseManager.GetNode(cur).exits;
-            if (exits.Count == 0) break;
-            cur = exits[0];
-        }
-
-        return chain;
-    }
-
-    private void PlaceBranchChain(List<int> chain, int splitRing, int rejoinRing, int ringCount)
-    {
-        // 갈라진 지점에서 합류 지점까지의 진행 각도 (원을 따라 앞으로)
-        int span = rejoinRing - splitRing;
-        if (span <= 0) span += ringCount;
-
-        for (int i = 0; i < chain.Count; i++)
-        {
-            float t     = (i + 1f) / (chain.Count + 1f);           // 두 지점 사이 보간
-            float angle = AngleAt(splitRing + t * span, ringCount);
-            positions[chain[i]] = PointOnCircle(angle, mapRadius + branchOffset);
-        }
-    }
-
-    private static float AngleAt(float ringPos, int ringCount)
-        => ringPos / ringCount * Mathf.PI * 2f - Mathf.PI / 2f;
-
-    private static Vector2 PointOnCircle(float angle, float radius)
-        => new(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius);
 
     // ── 그리기 ──────────────────────────────────────────
 
-    private void DrawEdges(int total)
+    private void DrawEdges()
     {
-        for (int i = 0; i < total; i++)
+        foreach (var kv in positions)
         {
-            var node = boardPhaseManager.GetNode(i);
+            var node = boardPhaseManager.GetNode(kv.Key);
             if (node == null) continue;
 
             foreach (int next in node.exits)
             {
-                if (next < 0 || next >= total) continue;
-                DrawEdge(positions[i], positions[next]);
+                if (!positions.TryGetValue(next, out var to)) continue;
+
+                // 간선은 도착 노드의 구획을 따른다 — 조우지점에서 다음 구획으로 나가는 간선도 다음 구획과 함께 열린다
+                var target = boardPhaseManager.GetNode(next);
+                edgeViews.Add(new EdgeView { image = DrawEdge(kv.Value, to), section = target.section });
             }
         }
     }
 
     // UGUI에는 선 요소가 없으므로 얇은 Image를 회전·신축해 선분으로 쓴다
-    private void DrawEdge(Vector2 from, Vector2 to)
+    private Image DrawEdge(Vector2 from, Vector2 to)
     {
         var go = new GameObject("Edge", typeof(RectTransform));
         go.transform.SetParent(mapRoot, false);
@@ -208,97 +317,303 @@ public class BoardMapView : MonoBehaviour
         rt.localRotation    = Quaternion.Euler(0, 0, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
 
         spawned.Add(go);
+        return img;
     }
 
-    private void DrawNodes(int total)
+    private void DrawNodes()
     {
-        for (int i = 0; i < total; i++)
+        foreach (var kv in positions)
         {
-            var node = boardPhaseManager.GetNode(i);
+            var node = boardPhaseManager.GetNode(kv.Key);
             if (node == null) continue;
 
             var go = Instantiate(nodePrefab, mapRoot);
-            go.GetComponent<RectTransform>().anchoredPosition = positions[i];
+            go.name = $"Node_{node.index}";
 
-            var img = go.GetComponentInChildren<Image>();
-            if (img != null) img.color = GetNodeColor(node.type);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchoredPosition = kv.Value;
+            rt.localScale = Vector3.one * (node.track == BoardTrack.Shared ? encounterScale : nodeScale);
 
             var label = go.GetComponentInChildren<TextMeshProUGUI>();
-            if (label != null) label.text = GetNodeLabel(node.type);
+            if (label != null) label.text = GetNodeLabel(node);
 
-            // 교차로는 한 단계 크게 그려 눈에 띄게 한다
-            if (node.IsIntersection)
-                go.GetComponent<RectTransform>().localScale = Vector3.one * 1.35f;
+            nodeViews.Add(new NodeView
+            {
+                node  = node,
+                image = go.GetComponentInChildren<Image>(),
+                label = label,
+            });
 
             spawned.Add(go);
         }
     }
+
+    // 아이콘은 맵과 함께 스크롤돼야 하므로 맵 루트 아래로 옮긴다
+    private void AttachIcons()
+    {
+        foreach (var icon in new[] { playerIcon, bossIcon })
+        {
+            if (icon == null) continue;
+            if (icon.parent != mapRoot) icon.SetParent(mapRoot, false);
+            icon.anchorMin = icon.anchorMax = new Vector2(0.5f, 0.5f);
+            icon.SetAsLastSibling();
+        }
+    }
+
+    // ── 구획 드러내기 ───────────────────────────────────
+
+    private void AnimateReveal()
+    {
+        if (sectionReveal == null) return;
+
+        bool  changed = false;
+        int   current = boardPhaseManager.CurrentSection;
+        float step    = revealTime > 0f ? Time.deltaTime / revealTime : 1f;
+
+        for (int s = 0; s < sectionReveal.Length; s++)
+        {
+            float target = s <= current ? 1f : 0f;
+            if (Mathf.Approximately(sectionReveal[s], target)) continue;
+            sectionReveal[s] = Mathf.MoveTowards(sectionReveal[s], target, step);
+            changed = true;
+        }
+
+        if (changed) RefreshNodeTint();
+    }
+
+    private float RevealOf(int section)
+        => sectionReveal == null || section < 0 || section >= sectionReveal.Length ? 1f : sectionReveal[section];
+
+    private void RefreshNodeTint()
+    {
+        int current = boardPhaseManager.CurrentSection;
+
+        foreach (var v in nodeViews)
+        {
+            if (v.image == null) continue;
+            var node = v.node;
+
+            // 시작 칸은 늘 보인다. 조우지점은 자기가 끝내는 구획과 함께 드러난다
+            float reveal = node.type == NodeType.Start ? 1f : RevealOf(node.section);
+
+            Color c = GetNodeColor(node);
+            if (node.track == BoardTrack.Boss) c = Dim(c, bossTrackDim);
+
+            bool isHere  = node.index == boardPhaseManager.PlayerPosition
+                        || node.index == boardPhaseManager.BossPosition;
+            bool visited = (node.track == BoardTrack.Player && node.claimedByPlayer)
+                        || (node.track == BoardTrack.Boss   && node.claimedByBoss);
+            bool passed  = node.section < current && node.track != BoardTrack.Shared;   // 되돌아갈 수 없는 구획
+            if ((visited || passed) && !isHere) c = Dim(c, visitedDim);
+
+            v.image.color = Color.Lerp(hiddenColor, c, reveal);
+            if (v.label != null) v.label.alpha = Mathf.InverseLerp(0.5f, 1f, reveal);
+        }
+
+        foreach (var e in edgeViews)
+        {
+            if (e.image == null) continue;
+            var c = edgeColor;
+            c.a = Mathf.Lerp(0.12f, 1f, RevealOf(e.section));
+            e.image.color = c;
+        }
+    }
+
+    private static Color Dim(Color c, float k) => new(c.r * k, c.g * k, c.b * k, c.a);
 
     private void Clear()
     {
         foreach (var go in spawned)
             if (go != null) Destroy(go);
         spawned.Clear();
+        nodeViews.Clear();
+        edgeViews.Clear();
+        positions.Clear();
     }
 
-    // ── 아이콘 ──────────────────────────────────────────
+    // ── 스크롤 ──────────────────────────────────────────
 
-    // ── 외부 조회 (교차로 화살표 배치 등) ───────────────
+    private void FocusOn(int nodeIndex, bool instant = false)
+    {
+        if (!positions.TryGetValue(nodeIndex, out var p)) return;
 
-    public bool HasLayout => positions != null;
+        scrollTargetY = Mathf.Clamp(p.y, 0f, maxFocusY);
+        if (instant) { scrollY = scrollTargetY; ApplyScroll(); }
+    }
+
+    private void UpdateScroll()
+    {
+        // 휠로 위아래를 훑어볼 수 있다 — 말이 다시 움직이면 말을 따라간다
+        float wheel = Input.mouseScrollDelta.y;
+        if (!Mathf.Approximately(wheel, 0f))
+            scrollTargetY = Mathf.Clamp(scrollTargetY + wheel * wheelSpeed, 0f, maxFocusY);
+
+        if (Mathf.Approximately(scrollY, scrollTargetY)) return;
+
+        scrollY = Mathf.Lerp(scrollY, scrollTargetY, 1f - Mathf.Exp(-followSpeed * Time.deltaTime));
+        if (Mathf.Abs(scrollY - scrollTargetY) < 0.5f) scrollY = scrollTargetY;
+        ApplyScroll();
+    }
+
+    private void ApplyScroll()
+    {
+        if (mapRoot == null) return;
+        mapRoot.anchoredPosition = rootBasePos + new Vector2(0f, focusBias - scrollY);
+    }
+
+    // ── 진행도 표시 ─────────────────────────────────────
+    //
+    // "보스가 조우지점까지 몇 칸 남았나"가 안 보이면 짧은 길 / 돌아가는 길 선택이 작동하지 않는다.
+    // 무조건 긴 길이 정답이 된다 (GDD 14장 — 필수 표시 요소). 세로 맵이라 오른쪽 여백에 둔다.
+
+    private void EnsureStatusTexts()
+    {
+        if (statusText == null) statusText = CreateText("BoardStatus", -150f, 22);
+        if (logText    == null) logText    = CreateText("BoardLog",    -320f, 22);
+    }
+
+    private TextMeshProUGUI CreateText(string name, float y, int size)
+    {
+        var parent = PanelRoot;
+        if (parent == null) return null;
+
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.70f, 1f);
+        rt.anchorMax = new Vector2(0.98f, 1f);
+        rt.pivot     = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(0f, y);
+        rt.sizeDelta = new Vector2(0f, size * 7f);
+
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.fontSize         = size;
+        tmp.alignment        = TextAlignmentOptions.TopLeft;
+        tmp.raycastTarget    = false;
+        tmp.enableAutoSizing = false;
+        tmp.color            = new Color(1f, 0.93f, 0.75f);
+
+        var font = nodePrefab != null ? nodePrefab.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+        if (font != null && font.font != null)
+        {
+            tmp.font               = font.font;
+            tmp.fontSharedMaterial = font.font.material;
+        }
+        return tmp;
+    }
+
+    private void RefreshStatus()
+    {
+        if (statusText == null || boardPhaseManager.TotalNodes == 0) return;
+
+        var enc = boardPhaseManager.CurrentEncounter;
+        string encName = enc == null ? "" : EncounterName(enc.encounterKind);
+
+        string me   = boardPhaseManager.PlayerAtEncounter ? "도착 - 대기 중" : $"최단 {boardPhaseManager.PlayerStepsToEncounter}칸";
+        string boss = boardPhaseManager.BossAtEncounter   ? "도착 - 무장 중" : $"최단 {boardPhaseManager.BossStepsToEncounter}칸";
+
+        var bossEntity = GameManager.Instance != null ? GameManager.Instance.CurrentBoss : null;
+        string style = bossEntity == null ? ""
+                     : bossEntity.IsPanicMode ? "선점형(패닉)"
+                     : bossEntity.MoveStyle == BossMoveStyle.Rusher ? "선점형" : "수집형";
+        string hp    = bossEntity == null ? "" : $"{bossEntity.Stats.CurrentHp}/{bossEntity.Stats.MaxHp}";
+        int minions  = GameManager.Instance != null ? GameManager.Instance.BossMinions.Count : 0;
+
+        string dice = revealedBossRoll > 0 ? $"\n다음 주사위 {revealedBossRoll} (예언)"
+                    : lastBossRoll     > 0 ? $"\n직전 주사위 {lastBossRoll}" : "";
+        string freeze = boardPhaseManager.BossFreezeTurns > 0 ? $"\n속박 {boardPhaseManager.BossFreezeTurns}턴" : "";
+
+        statusText.text =
+            $"구획 {boardPhaseManager.CurrentSection + 1}/{boardPhaseManager.SectionCount} - {encName}\n" +
+            $"나: {me}\n" +
+            $"보스: {boss}\n" +
+            $"보스 HP {hp} / 하수인 {minions}\n" +
+            $"성향: {style}{dice}{freeze}";
+    }
+
+    private void ShowLog(string message)
+    {
+        CaptureRootBase();
+        EnsureStatusTexts();
+        if (logText == null) return;
+        logText.text  = message;
+        logClearTime  = Time.time + 3f;
+        RefreshStatus();
+    }
+
+    // ── 외부 조회 (목적지 선택 하이라이트 배치 등) ──────
+
+    public bool HasLayout => positions.Count > 0;
 
     public RectTransform MapRoot => mapRoot;
 
+    public bool IsNodeVisible(int index) => positions.ContainsKey(index);
+
     public Vector2 GetNodePosition(int index)
-    {
-        if (positions == null || index < 0 || index >= positions.Length) return Vector2.zero;
-        return positions[index];
-    }
+        => positions.TryGetValue(index, out var p) ? p : Vector2.zero;
+
+    // ── 아이콘 ──────────────────────────────────────────
 
     private void RefreshIcons()
     {
-        if (positions == null) return;
+        int p = boardPhaseManager.PlayerPosition;
+        int b = boardPhaseManager.BossPosition;
 
-        MoveIcon(playerIcon, boardPhaseManager.PlayerPosition);
-        MoveIcon(bossIcon,   boardPhaseManager.BossPosition);
+        // 같은 칸(시작 칸·조우지점)에 서면 겹쳐 보이지 않게 벌린다 — 내 트랙 쪽인 왼쪽이 나
+        const float stackOffset = 22f;
+        bool same = p == b;
+        MoveIcon(playerIcon, p, same ? new Vector2(-stackOffset, 0f) : Vector2.zero);
+        MoveIcon(bossIcon,   b, same ? new Vector2( stackOffset, 0f) : Vector2.zero);
     }
 
-    private void MoveIcon(RectTransform icon, int nodeIndex)
+    private void MoveIcon(RectTransform icon, int nodeIndex, Vector2 offset)
     {
-        if (icon == null || positions == null) return;
-        if (nodeIndex < 0 || nodeIndex >= positions.Length) return;
-
-        icon.anchoredPosition = positions[nodeIndex];
+        if (icon == null || !positions.TryGetValue(nodeIndex, out var pos)) return;
+        icon.anchoredPosition = pos + offset;
+        icon.SetAsLastSibling();   // 런타임 생성 노드보다 위에
     }
 
     // ── 노드 색·라벨 ────────────────────────────────────
 
-    private Color GetNodeColor(NodeType type) => type switch
+    private Color GetNodeColor(NodeData node) => node.type switch
     {
-        NodeType.Monster  => monsterColor,
-        NodeType.Elite    => eliteColor,
-        NodeType.Event    => eventColor,
-        NodeType.Shop     => shopColor,
-        NodeType.Rest     => restColor,
-        NodeType.Treasure => treasureColor,
-        NodeType.Curse    => curseColor,
-        NodeType.Salary   => salaryColor,
-        NodeType.Start    => startColor,
-        _                 => emptyColor,
+        NodeType.Monster   => monsterColor,
+        NodeType.Elite     => eliteColor,
+        NodeType.Event     => eventColor,
+        NodeType.Shop      => shopColor,
+        NodeType.Rest      => restColor,
+        NodeType.Treasure  => treasureColor,
+        NodeType.Curse     => curseColor,
+        NodeType.Encounter => encounterColor,
+        NodeType.Start     => startColor,
+        _                  => emptyColor,
     };
 
     // Neo둥근모에 없을 수 있는 특수기호(⚔ ☠ ★ ♥) 대신 한글 한 글자를 쓴다.
-    private static string GetNodeLabel(NodeType type) => type switch
+    private static string GetNodeLabel(NodeData node) => node.type switch
     {
-        NodeType.Monster  => "몬",
-        NodeType.Elite    => "정",
-        NodeType.Event    => "?",
-        NodeType.Shop     => "상",
-        NodeType.Rest     => "휴",
-        NodeType.Treasure => "보",
-        NodeType.Curse    => "저",
-        NodeType.Salary   => "월",
-        NodeType.Start    => "시",
-        _                 => "·",
+        NodeType.Monster   => "몬",
+        NodeType.Elite     => "정",
+        NodeType.Event     => "?",
+        NodeType.Shop      => "상",
+        NodeType.Rest      => "휴",
+        NodeType.Treasure  => "보",
+        NodeType.Curse     => "저",
+        NodeType.Start     => "시",
+        NodeType.Encounter => node.encounterKind switch
+        {
+            EncounterKind.Supply => "보급",
+            EncounterKind.Camp   => "야영",
+            _                    => "결전",
+        },
+        _                  => "·",
+    };
+
+    public static string EncounterName(EncounterKind kind) => kind switch
+    {
+        EncounterKind.Supply => "보급소",
+        EncounterKind.Camp   => "야영지",
+        _                    => "최종 결전",
     };
 }

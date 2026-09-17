@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: "Card_\uC608\uC5B8\uC758\uC8FC\uC0AC\uC704"
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: "\uC608\uC5B8\uC758 \uC8FC\uC0AC\uC704"
-  description: "\uC55E 6\uCE78\uC744 \uBBF8\uB9AC \uD655\uC778\uD55C\uB2E4."
+  description: "\uBCF4\uC2A4\uC758 \uB2E4\uC74C \uC8FC\uC0AC\uC704\uB97C \uBBF8\uB9AC
+    \uAD74\uB824 \uBCF8\uB2E4."
   artwork: {fileID: 0}
   cardType: 1
   rangeType: 2
@@ -23,6 +24,9 @@ MonoBehaviour:
   targetSlots: 0
   targetAlly: 0
   isAoe: 0
+  autoTarget: 0
+  targetMode: 0
+  targetSelf: 0
   effects:
   - type: 12
     value: 6

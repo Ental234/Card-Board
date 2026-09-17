@@ -1,12 +1,18 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// BoardStageData를 읽어 런타임 보드 그래프를 생성한다.
+// BoardStageData를 읽어 스테이지 하나의 보드 그래프를 생성한다. (v0.6 — 구획 단위 일방통행 메시)
 //
-// 구조: 본선(메인 루프) + 우회 분기.
-//   · 분기는 본선의 어느 칸에서 갈라져 몇 칸 뒤 본선에 다시 합류한다 (막다른 길 없음)
-//   · 갈라지는 칸은 exits가 2개 = 교차로
-// 규칙: index 0 = Start 고정, 동일 타입 maxConsecutiveSameType 초과 연속 금지
+// 구조:
+//   0번 = 시작 칸(공용)
+//   구획마다  [구획 시작] ─┬─ 플레이어 갈래 N개 ─┬─ [조우지점]
+//                         └─ 보스 갈래 M개 ────┘
+//   조우지점이 다음 구획의 시작이 된다. 마지막 구획의 조우지점 = 최종 결전.
+//
+// · 갈래마다 길이가 다르다 — 짧은 길 / 돌아가는 길
+// · 이웃 갈래 사이에 건너가는 간선을 몇 개 둔다. 진행도가 항상 커지는 쪽으로만 이어서
+//   그래프가 순환하지 않는다 (일방통행 보장)
+// · 트랙끼리는 섞이지 않는다. 합류는 조우지점에서만 일어난다
 public class BoardGenerator : MonoBehaviour
 {
     // 보스 AI가 경로를 판단할 때 합산하는 노드별 기본 가중치
@@ -16,130 +22,191 @@ public class BoardGenerator : MonoBehaviour
         NodeType.Treasure => 4,
         NodeType.Monster  => 3,
         NodeType.Shop     => 3,
-        NodeType.Salary   => 2,
         NodeType.Event    => 1,
         NodeType.Rest     => 1,
-        _                 => 0,   // Empty, Start, Curse
+        _                 => 0,   // Start, Curse, Encounter
     };
 
-    public NodeData[] Generate(BoardStageData stageData)
+    public NodeData[] Generate(BoardStageData data)
     {
-        int mainCount = Mathf.Max(4, stageData.totalNodes);
-        var nodes     = new List<NodeData>(mainCount);
+        var nodes = new List<NodeData>();
 
-        // ── ① 본선 루프 ────────────────────────────────
-        for (int i = 0; i < mainCount; i++)
-            nodes.Add(new NodeData(i, NodeType.Empty));
+        var start = AddNode(nodes, NodeType.Start, BoardTrack.Shared, section: 0, lane: 0, progress: 0f);
+        start.isFixed = true;
 
-        for (int i = 0; i < mainCount; i++)
-            nodes[i].exits.Add((i + 1) % mainCount);
+        int sectionStart = start.index;
+        int sections     = Mathf.Max(1, data.sectionCount);
 
-        // ── ② 우회 분기 붙이기 ──────────────────────────
-        AttachBranches(nodes, stageData, mainCount);
+        for (int s = 0; s < sections; s++)
+        {
+            bool isLast = s == sections - 1;
 
-        // ── ③ 노드 타입 배분 ────────────────────────────
-        AssignTypes(nodes, stageData);
+            // 조우지점을 먼저 만들어 두고 갈래 끝을 여기로 잇는다
+            var encounter = AddNode(nodes, NodeType.Encounter, BoardTrack.Shared, s, lane: 0, progress: 1f);
+            encounter.isFixed       = true;
+            encounter.encounterKind = isLast ? EncounterKind.Final
+                                    : (s % 2 == 0 ? EncounterKind.Supply : EncounterKind.Camp);
 
-        // ── ④ 가중치 & 고정 표시 ────────────────────────
-        FinalizeNodes(nodes, stageData);
+            BuildTrack(nodes, data, BoardTrack.Player, s, sectionStart, encounter.index,
+                       data.playerLaneCount, data.crossLinksPerLanePair);
+            BuildTrack(nodes, data, BoardTrack.Boss,   s, sectionStart, encounter.index,
+                       data.bossLaneCount,   data.bossCrossLinks);
 
+            sectionStart = encounter.index;
+        }
+
+        FinalizeNodes(nodes, data);
         return nodes.ToArray();
     }
 
-    // ── 분기 생성 ────────────────────────────────────────
+    // ── 트랙 생성 ────────────────────────────────────────
 
-    private void AttachBranches(List<NodeData> nodes, BoardStageData data, int mainCount)
+    // 한 갈림길의 갈래는 기본 2개, 많아도 3개 — 더 많으면 선택이 "고민"이 아니라 "훑어보기"가 된다
+    public const int MinLanes = 2;
+    public const int MaxLanes = 3;
+
+    private void BuildTrack(List<NodeData> nodes, BoardStageData data, BoardTrack track,
+                            int section, int from, int to, int laneCount, int crossLinks)
     {
-        if (data.branchCount <= 0) return;
+        laneCount = Mathf.Clamp(laneCount, MinLanes, MaxLanes);
 
-        // 갈라지는 지점이 서로 겹치지 않도록 본선을 균등 분할해 후보를 잡는다
-        var splitPoints = PickSplitPoints(data.branchCount, mainCount);
+        var lengths = PickLaneLengths(laneCount, data.laneLengthMin, data.laneLengthMax);
+        var lanes   = new List<List<int>>(laneCount);
 
-        foreach (int split in splitPoints)
+        for (int l = 0; l < laneCount; l++)
         {
-            int span = Random.Range(data.branchSpanMin, data.branchSpanMax + 1);
-            int rejoin = (split + span) % mainCount;
-            if (rejoin == split) continue;   // 한 바퀴 돌아 제자리면 무의미
-
-            int length = Random.Range(data.branchLengthMin, data.branchLengthMax + 1);
-            if (length <= 0) continue;
-
-            // 우회로 노드들을 새 인덱스로 추가
-            int first = nodes.Count;
-            for (int i = 0; i < length; i++)
-                nodes.Add(new NodeData(nodes.Count, NodeType.Empty));
-
-            // 갈라짐: 본선 split 칸에 두 번째 출구 추가 → 교차로가 된다
-            nodes[split].exits.Add(first);
-
-            // 우회로 내부 연결 후 본선으로 합류
-            for (int i = 0; i < length; i++)
+            var lane = new List<int>(lengths[l]);
+            for (int i = 0; i < lengths[l]; i++)
             {
-                int cur  = first + i;
-                int next = (i == length - 1) ? rejoin : first + i + 1;
-                nodes[cur].exits.Add(next);
+                float progress = (i + 1f) / (lengths[l] + 1f);
+                lane.Add(AddNode(nodes, NodeType.Monster, track, section, l, progress).index);
             }
+
+            // 구획 시작 → 갈래 → 조우지점
+            nodes[from].exits.Add(lane[0]);
+            for (int i = 0; i < lane.Count - 1; i++)
+                nodes[lane[i]].exits.Add(lane[i + 1]);
+            nodes[lane[lane.Count - 1]].exits.Add(to);
+
+            lanes.Add(lane);
         }
+
+        for (int l = 0; l + 1 < laneCount; l++)
+        {
+            AddCrossLinks(nodes, lanes[l], lanes[l + 1], crossLinks);
+            AddCrossLinks(nodes, lanes[l + 1], lanes[l], crossLinks);
+        }
+
+        foreach (var lane in lanes)
+            AssignTypes(nodes, lane, data);
     }
 
-    // 본선을 균등 분할해 분기 시작점을 고른다 (0번 = 시작 칸은 제외)
-    private List<int> PickSplitPoints(int branchCount, int mainCount)
+    // 갈래 길이 — 첫 갈래는 짧은 길, 마지막 갈래는 돌아가는 길로 고정하고 사이는 고르게 벌린다.
+    // 그래야 매 구획 "짧은 길 vs 돌아가는 길" 선택이 반드시 생긴다.
+    // 순서는 섞는다 — 늘 위가 짧으면 읽을 것도 없어진다.
+    private static List<int> PickLaneLengths(int count, int min, int max)
     {
-        var points = new List<int>();
-        int stride  = Mathf.Max(2, mainCount / Mathf.Max(1, branchCount));
+        min = Mathf.Max(1, min);
+        max = Mathf.Max(min, max);
 
-        for (int b = 0; b < branchCount; b++)
+        var lengths = new List<int>(count);
+        for (int l = 0; l < count; l++)
         {
-            int p = 1 + b * stride;
-            if (p >= mainCount) break;
-            points.Add(p);
+            float t = count == 1 ? 0.5f : (float)l / (count - 1);
+            int   baseLen = Mathf.RoundToInt(Mathf.Lerp(min, max, t));
+            int   jitter  = (l == 0 || l == count - 1) ? 0 : Random.Range(-1, 2);
+            lengths.Add(Mathf.Clamp(baseLen + jitter, min, max));
         }
-        return points;
+
+        for (int i = lengths.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (lengths[i], lengths[j]) = (lengths[j], lengths[i]);
+        }
+        return lengths;
+    }
+
+    // a 갈래의 한 노드에서 b 갈래의 "조금 더 앞선" 노드로 건너가는 간선.
+    // 진행도가 엄격히 커지는 쪽으로만 이으므로 순환이 생기지 않는다.
+    private static void AddCrossLinks(List<NodeData> nodes, List<int> a, List<int> b, int count)
+    {
+        if (count <= 0 || a.Count < 2 || b.Count < 2) return;
+
+        // 갈래 전체에 고르게 흩뿌린다 — 한곳에 몰리면 사실상 한 번의 선택이 된다
+        for (int k = 0; k < count; k++)
+        {
+            float lo = (float)k / count;
+            float hi = (k + 1f) / count;
+            int   i  = Mathf.Clamp(Mathf.FloorToInt(Random.Range(lo, hi) * (a.Count - 1)), 0, a.Count - 2);
+
+            float fromProgress = nodes[a[i]].progress;
+            int   target = -1;
+            foreach (int idx in b)
+            {
+                if (nodes[idx].progress > fromProgress) { target = idx; break; }
+            }
+            if (target < 0) continue;
+
+            var exits = nodes[a[i]].exits;
+            if (!exits.Contains(target)) exits.Add(target);
+        }
     }
 
     // ── 노드 타입 배분 ───────────────────────────────────
 
-    private void AssignTypes(List<NodeData> nodes, BoardStageData data)
+    private void AssignTypes(List<NodeData> nodes, List<int> lane, BoardStageData data)
     {
-        nodes[0].type = NodeType.Start;
-
-        int need = nodes.Count - 1;                 // 0번(Start) 제외
-        var pool = BuildPool(data, need);
+        var pool   = BuildPool(data, lane.Count);
         Shuffle(pool);
         var placed = PlaceWithConstraint(pool, data.maxConsecutiveSameType);
 
-        for (int i = 0; i < placed.Count; i++)
-            nodes[i + 1].type = placed[i];
+        for (int i = 0; i < lane.Count; i++)
+            nodes[lane[i]].type = placed[i];
     }
 
-    private List<NodeType> BuildPool(BoardStageData data, int count)
+    // 비율대로 개수를 잡고, 반올림으로 모자란 칸은 비율을 가중치로 삼아 채운다.
+    // (예전엔 나머지를 빈 칸으로 채웠다. 빈 칸은 v0.6에서 폐기)
+    private static List<NodeType> BuildPool(BoardStageData data, int count)
     {
-        var pool = new List<NodeType>();
-        AddToPool(pool, NodeType.Monster,  data.monsterRatio,  count);
-        AddToPool(pool, NodeType.Elite,    data.eliteRatio,    count);
-        AddToPool(pool, NodeType.Event,    data.eventRatio,    count);
-        AddToPool(pool, NodeType.Shop,     data.shopRatio,     count);
-        AddToPool(pool, NodeType.Rest,     data.restRatio,     count);
-        AddToPool(pool, NodeType.Treasure, data.treasureRatio, count);
-        AddToPool(pool, NodeType.Curse,    data.curseRatio,    count);
-        AddToPool(pool, NodeType.Salary,   data.salaryRatio,   count);
+        var table = new (NodeType type, float ratio)[]
+        {
+            (NodeType.Monster,  data.monsterRatio),
+            (NodeType.Elite,    data.eliteRatio),
+            (NodeType.Event,    data.eventRatio),
+            (NodeType.Shop,     data.shopRatio),
+            (NodeType.Rest,     data.restRatio),
+            (NodeType.Treasure, data.treasureRatio),
+            (NodeType.Curse,    data.curseRatio),
+        };
 
-        while (pool.Count < count) pool.Add(NodeType.Empty);      // 나머지 = Empty
-        while (pool.Count > count) pool.RemoveAt(pool.Count - 1); // 초과분 제거
+        var pool = new List<NodeType>(count);
+        foreach (var (type, ratio) in table)
+            for (int i = 0; i < Mathf.FloorToInt(ratio * count); i++)
+                pool.Add(type);
 
+        float total = 0f;
+        foreach (var (_, ratio) in table) total += ratio;
+
+        while (pool.Count < count)
+        {
+            if (total <= 0f) { pool.Add(NodeType.Monster); continue; }
+
+            float roll = Random.Range(0f, total);
+            foreach (var (type, ratio) in table)
+            {
+                roll -= ratio;
+                if (roll <= 0f) { pool.Add(type); break; }
+            }
+            if (pool.Count < count && roll > 0f) pool.Add(NodeType.Monster);  // 부동소수 끝자락
+        }
+
+        while (pool.Count > count) pool.RemoveAt(pool.Count - 1);
         return pool;
-    }
-
-    private void AddToPool(List<NodeType> pool, NodeType type, float ratio, int total)
-    {
-        int count = Mathf.RoundToInt(ratio * total);
-        for (int i = 0; i < count; i++)
-            pool.Add(type);
     }
 
     // ── 가중치 & 고정 표시 ───────────────────────────────
 
-    private void FinalizeNodes(List<NodeData> nodes, BoardStageData data)
+    private static void FinalizeNodes(List<NodeData> nodes, BoardStageData data)
     {
         foreach (var n in nodes)
         {
@@ -151,10 +218,21 @@ public class BoardGenerator : MonoBehaviour
                 NodeType.Elite => data.elitePriorityWeight,
                 _              => 0,
             };
-
-            // 시작 칸과 교차로는 루프 재배치 대상에서 제외
-            n.isFixed = n.index == 0 || n.IsIntersection;
         }
+    }
+
+    private static NodeData AddNode(List<NodeData> nodes, NodeType type, BoardTrack track,
+                                    int section, int lane, float progress)
+    {
+        var n = new NodeData(nodes.Count, type)
+        {
+            track    = track,
+            section  = section,
+            lane     = lane,
+            progress = progress,
+        };
+        nodes.Add(n);
+        return n;
     }
 
     // ── 연속 제한 배치 ───────────────────────────────────
@@ -192,7 +270,7 @@ public class BoardGenerator : MonoBehaviour
 
     private bool IsViolating(List<NodeType> list, int idx, int maxConsecutive)
     {
-        if (idx < maxConsecutive) return false;
+        if (maxConsecutive <= 0 || idx < maxConsecutive) return false;
         NodeType t = list[idx];
         for (int k = 1; k <= maxConsecutive; k++)
             if (list[idx - k] != t) return false;

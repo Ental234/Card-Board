@@ -49,7 +49,41 @@ public enum NodeType
     Rest,     // 휴식: HP 회복 or 카드 업그레이드
     Treasure, // 보물: 렐릭·카드·동료 무료 획득
     Curse,    // 저주: 부정 효과
-    Salary,   // 월급: 플레이어·보스 모두 골드 지급
+    Salary,   // 월급 — 폐기 (v0.6). 생성하지 않는다. 번호 유지를 위해 남겨둠
+    Encounter,// 조우지점: 구획의 끝. 두 트랙이 합류한다 (종류는 NodeData.encounterKind)
+}
+
+// 노드가 누구의 길인가 (v0.6 — 두 트랙이 각자 나아가 조우지점에서 합류)
+public enum BoardTrack
+{
+    Shared,   // 시작 칸·조우지점 — 양쪽이 모두 선다
+    Player,
+    Boss,
+}
+
+// 조우지점 종류 — 선착 보상이 다르다 (GDD 4장)
+public enum EncounterKind
+{
+    Supply,   // 보급소: 상점 구매
+    Camp,     // 야영지: HP 회복 · 편성 정비
+    Final,    // 스테이지 끝: 선착 보상 없음, 턴 제한 없는 결전
+}
+
+// 보스 이동 성향 (GDD 4장) — 같은 가중치 엔진에 판단 기준만 달리 준다
+public enum BossMoveStyle
+{
+    Collector = 0,  // 수집형: 경로 가중치가 큰 쪽 — 늦게 오지만 강해져서 온다
+    Rusher    = 1,  // 선점형: 조우지점까지 남은 거리가 짧은 쪽 — 빨리 와서 선착 보상을 챙긴다
+}
+
+// 조우지점에서 선착한 쪽이 대기 턴마다 고르는 보급 (플레이어)
+public enum SupplyChoice
+{
+    Shop,       // 구매 (보급소에서만)
+    Heal,       // HP 회복(소)
+    Upgrade,    // 카드 강화 — 강화 시스템 미구현
+    RemoveCard, // 카드 제거 — 대기 메뉴용 선택 UI 미구현
+    Skip,       // 아무것도 안 함
 }
 
 // 카드 효과 종류 (전투 카드 + 보드 카드 공용)
@@ -67,7 +101,7 @@ public enum EffectType
     // 보드 카드
     BoardDiceBonus,   // 주사위 강화 (value = 추가값)
     BoardReroll,      // 주사위 재굴림 허용
-    BoardReverseMove, // 역방향 이동
+    BoardReverseMove, // 역방향 이동 — 폐기 (v0.6, 카드 삭제). 뒤 번호를 지키려고 남겨둠
     BoardTeleport,    // 순간이동 (value = 목표 nodeIndex, -1이면 플레이어가 UI로 선택)
     BoardFreezeBoss,  // 속박의 사슬 (value = 봉쇄 턴 수)
     BoardRevealNodes, // 예언의 주사위 (value = 미리 볼 칸 수)

@@ -6,6 +6,7 @@ using UnityEngine;
 // Cards(플레이어 전용), Relics(공유 — 선점 긴장감), Potions(플레이어 전용),
 // Companions(플레이어 전용), BossItems(보스 전용)
 // 보스 AI는 Relics 섹션에서만 구매, 1회 방문당 maxBossRelicPurchases 제한
+// 재고는 상점 노드마다 독립이다 (v0.6)
 public class ShopManager : MonoBehaviour
 {
     public static ShopManager Instance { get; private set; }
@@ -27,7 +28,7 @@ public class ShopManager : MonoBehaviour
     [SerializeField] private int bossItemBasePrice  = 60;
 
     [Header("보스 AI")]
-    [SerializeField] private int maxBossRelicPurchases = 1;  // 보스가 1회 방문당 구매 가능한 렐릭 수
+    [SerializeField] private int maxBossRelicPurchases = 1;  // 보스가 1회 방문당 구매 가능한 렐릭 수 (플레이어도 1개)
 
     [Header("카드 풀")]
     [SerializeField] private List<CardData>      allCardPool      = new();
@@ -40,16 +41,40 @@ public class ShopManager : MonoBehaviour
 
     public event Action OnShopRefreshed;   // UI가 구독 → 재고 목록 갱신
 
-    // ── 현재 재고 ────────────────────────────────────────
+    // ── 재고 — 상점 노드마다 독립 (v0.6) ─────────────────
+    //
+    // 한 스테이지에 상점이 여럿이고 조우지점(보급소)도 상점 역할을 하므로,
+    // 재고를 전역으로 두면 뒤쪽 상점이 텅 빈다. 노드 인덱스별로 따로 들고 있는다.
+    //
+    // 재고는 **그 노드를 처음 열 때 한 번** 뽑고 스테이지가 끝날 때까지 유지한다.
+    // ★ 렐릭을 다시 뽑으면 선점이 성립하지 않는다 —
+    //   보스가 사간 뒤 플레이어가 열었을 때 재고가 되살아나 "먼저 사갔다"가 없던 일이 된다.
+    //   보급소에서 대기 턴마다 다시 여는 경우에도 같은 재고를 봐야 한다.
+    //
+    // 스테이지가 바뀌면 ResetStock()으로 전부 비운다 (노드 인덱스가 새 보드에서 재사용되므로).
 
-    public List<ShopItem<CardData>>      Cards      { get; } = new();
-    public List<ShopItem<RelicData>>     Relics     { get; } = new();
-    public List<ShopItem<CardData>>      Potions    { get; } = new();
-    public List<ShopItem<CompanionData>> Companions { get; } = new();
-    public List<ShopItem<RelicData>>     BossItems  { get; } = new();
+    private class NodeStock
+    {
+        public readonly List<ShopItem<CardData>>      Cards      = new();
+        public readonly List<ShopItem<RelicData>>     Relics     = new();
+        public readonly List<ShopItem<CardData>>      Potions    = new();
+        public readonly List<ShopItem<CompanionData>> Companions = new();
+        public readonly List<ShopItem<RelicData>>     BossItems  = new();
+    }
 
-    private ClassTag playerClass;
-    private int      bossRelicPurchasesThisVisit;
+    private readonly Dictionary<int, NodeStock> stocks = new();
+    private NodeStock current = new();   // 플레이어가 지금 보고 있는 상점
+
+    public List<ShopItem<CardData>>      Cards      => current.Cards;
+    public List<ShopItem<RelicData>>     Relics     => current.Relics;
+    public List<ShopItem<CardData>>      Potions    => current.Potions;
+    public List<ShopItem<CompanionData>> Companions => current.Companions;
+    public List<ShopItem<RelicData>>     BossItems  => current.BossItems;
+
+    // 렐릭은 방문당 1개 (양측). 선점의 긴장은 "어느 하나를 먼저 집느냐"에 있다 —
+    // 쓸어담을 수 있으면 골드 많은 쪽이 다 가져가고 경쟁이 사라진다.
+    private bool playerBoughtRelicThisVisit;
+    public  bool CanBuyRelicThisVisit => !playerBoughtRelicThisVisit;
 
     private void Awake()
     {
@@ -57,73 +82,68 @@ public class ShopManager : MonoBehaviour
         Instance = this;
     }
 
-    // ── 재고 생성 ────────────────────────────────────────
+    // ── 방문 ─────────────────────────────────────────────
 
-    // ── 재고의 수명 ──────────────────────────────────────
-    //
-    // 렐릭 섹션만 **플레이어와 보스가 공유**한다. 그래서 렐릭은 한 번 뽑으면 유지하고,
-    // 나머지(카드·포션·동료·보스아이템)는 플레이어가 상점을 열 때마다 새로 뽑는다.
-    //
-    // ★ 렐릭을 매번 새로 뽑으면 선점이 성립하지 않는다 —
-    //   보스가 사간 뒤 플레이어가 상점을 열면 재고가 되살아나 "먼저 사갔다"가 없던 일이 된다.
-    //
-    // 재고는 스테이지가 바뀔 때 ResetStock()으로 비운다.
-
-    // 플레이어가 상점 칸에 착지할 때 호출
-    public void OpenShop(ClassTag playerClassTag)
+    // 플레이어가 상점을 연다 (상점 노드 착지 / 보급소 이용)
+    public void OpenShop(ClassTag playerClassTag, int nodeIndex)
     {
-        playerClass = playerClassTag;
-        bossRelicPurchasesThisVisit = 0;
-
-        EnsureSharedStock();
-        RefreshPlayerStock();
+        current = GetOrCreateStock(nodeIndex, playerClassTag);
+        playerBoughtRelicThisVisit = false;
         OnShopRefreshed?.Invoke();
     }
 
-    // 보스가 상점 칸에 착지할 때 호출 (재고 공유, 보스 AI 구매만 실행)
-    public void BossVisitShop()
+    // 보스가 상점에 도착 — 그 노드의 렐릭을 가져간다. 샀으면 true.
+    public bool BossVisitShop(int nodeIndex)
     {
-        bossRelicPurchasesThisVisit = 0;
+        var  stock  = GetOrCreateStock(nodeIndex, CurrentPlayerClass());
+        bool bought = BossAiBuyRelic(stock);
 
-        EnsureSharedStock();
-        BossAiBuyRelics();
-        OnShopRefreshed?.Invoke();   // 플레이어가 상점을 보고 있다면 팔린 표시를 갱신한다
+        // 플레이어가 같은 상점을 보고 있다면 팔린 표시를 갱신한다
+        if (bought && stock == current) OnShopRefreshed?.Invoke();
+        return bought;
+    }
+
+    // 이 노드에 보스가 살 렐릭이 남아 있는가 (보스 대기 행동 판단용)
+    public bool HasUnsoldRelic(int nodeIndex)
+    {
+        var stock = GetOrCreateStock(nodeIndex, CurrentPlayerClass());
+        foreach (var item in stock.Relics)
+            if (!item.sold) return true;
+        return false;
     }
 
     // 스테이지 전환 시 호출 — 다음 스테이지는 새 재고로 시작한다
     public void ResetStock()
     {
-        Cards.Clear();
-        Relics.Clear();
-        Potions.Clear();
-        Companions.Clear();
-        BossItems.Clear();
+        stocks.Clear();
+        current = new NodeStock();
+        playerBoughtRelicThisVisit = false;
     }
 
-    // 공유 재고(렐릭) — 비어 있을 때만 뽑는다. 이미 있으면 보스가 사간 흔적을 그대로 둔다.
-    private void EnsureSharedStock()
+    private NodeStock GetOrCreateStock(int nodeIndex, ClassTag playerClass)
     {
-        if (Relics.Count > 0) return;
-        FillSlots(Relics, allRelicPool, relicSlots, relicBasePrice);
-    }
+        if (stocks.TryGetValue(nodeIndex, out var stock)) return stock;
 
-    // 플레이어 전용 재고 — 방문할 때마다 새로 뽑는다
-    private void RefreshPlayerStock()
-    {
-        Cards.Clear();
-        Potions.Clear();
-        Companions.Clear();
-        BossItems.Clear();
+        stock = new NodeStock();
 
         // 카드: 플레이어 직업 + Universal 필터
         var filteredCards = allCardPool.FindAll(c =>
             c.classTag == playerClass || c.classTag == ClassTag.Universal);
-        FillSlots(Cards, filteredCards, cardSlots, cardBasePrice);
 
-        FillSlots(Potions,    allPotionPool,    potionSlots,    potionBasePrice);
-        FillSlots(Companions, allCompanionPool, companionSlots, companionBasePrice);
-        FillSlots(BossItems,  allBossItemPool,  bossItemSlots,  bossItemBasePrice);
+        FillSlots(stock.Cards,      filteredCards,    cardSlots,      cardBasePrice);
+        FillSlots(stock.Relics,     allRelicPool,     relicSlots,     relicBasePrice);
+        FillSlots(stock.Potions,    allPotionPool,    potionSlots,    potionBasePrice);
+        FillSlots(stock.Companions, allCompanionPool, companionSlots, companionBasePrice);
+        FillSlots(stock.BossItems,  allBossItemPool,  bossItemSlots,  bossItemBasePrice);
+
+        stocks[nodeIndex] = stock;
+        return stock;
     }
+
+    private static ClassTag CurrentPlayerClass()
+        => GameManager.Instance != null && GameManager.Instance.Player != null
+         ? GameManager.Instance.Player.ClassTag
+         : ClassTag.Universal;
 
     private void FillSlots<T>(List<ShopItem<T>> target, List<T> pool, int slots, int basePrice)
         where T : UnityEngine.Object
@@ -153,28 +173,29 @@ public class ShopManager : MonoBehaviour
 
     public bool TryBuyRelic(ShopItem<RelicData> item)
     {
-        if (item.sold) return false;
+        if (item.sold || playerBoughtRelicThisVisit) return false;
         if (!GameManager.Instance.SpendPlayerGold(item.price)) return false;
 
         RelicManager.Instance?.AddPlayerRelic(item.data);
         item.sold = true;
+        playerBoughtRelicThisVisit = true;
         return true;
     }
 
     // 포션은 덱이 아니라 소지품으로 간다.
     // 소지 상한 검사를 골드 차감 **앞**에 둔다 — 순서가 반대면 가득 찬 상태에서
     // 돈만 나가고 포션은 안 들어온다.
+    //
+    // 포션은 **품절되지 않는다** (v0.6) — 조우 직전에 사서 바로 쓰는 것이 선착 보상의 핵심 값이다.
+    // 소지 상한 3이 자연스러운 뚜껑 역할을 한다.
     public bool TryBuyPotion(ShopItem<CardData> item)
     {
-        if (item.sold) return false;
-
         var potions = GameManager.Instance.Player.PotionManager;
         if (potions.IsFull) return false;
 
         if (!GameManager.Instance.SpendPlayerGold(item.price)) return false;
 
         potions.TryAdd(item.data);
-        item.sold = true;
         return true;
     }
 
@@ -190,22 +211,23 @@ public class ShopManager : MonoBehaviour
 
     // ── 구매 — 보스 AI ───────────────────────────────────
 
-    // 보스 상점 방문 시 자동 실행 — 렐릭 섹션만, 최대 maxBossRelicPurchases개
-    private void BossAiBuyRelics()
+    // 보스 상점 방문 시 자동 실행 — 렐릭 섹션만, 방문당 maxBossRelicPurchases개.
+    // 포션은 사지 않는다 (v0.6 — 포션은 플레이어의 전술 자원).
+    private bool BossAiBuyRelic(NodeStock stock)
     {
         int bought = 0;
 
-        foreach (var item in Relics)
+        foreach (var item in stock.Relics)
         {
             if (bought >= maxBossRelicPurchases) break;
             if (item.sold) continue;
 
-            // 보스는 골드 차감 없이 렐릭 획득 (보스 골드 시스템은 단순화)
+            // 보스는 골드 차감 없이 렐릭 획득 — 보스 골드 입수 경로는 미결정 (GDD 11·15장)
             RelicManager.Instance?.AddBossRelic(item.data);
             item.sold = true;
             bought++;
-            bossRelicPurchasesThisVisit++;
         }
+        return bought > 0;
     }
 
     // 카드 제거 서비스 (상점에서 카드 슬리밍)

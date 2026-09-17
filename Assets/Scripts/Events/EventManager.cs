@@ -101,7 +101,7 @@ public class EventManager : MonoBehaviour
                 break;
 
             case EventEffectType.TeleportToBoss:
-                gm.TeleportPlayerToBoss();
+                gm.StartHeraldEncounter();
                 break;
 
             case EventEffectType.MaxHpChange:

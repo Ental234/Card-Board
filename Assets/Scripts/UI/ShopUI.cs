@@ -77,11 +77,13 @@ public class ShopUI : MonoBehaviour
         foreach (var item in shop.Relics)
         {
             var captured = item;
+            // 렐릭은 방문당 1개 — 하나 사면 나머지는 잠긴다 (선점 경쟁)
             CreateItemButton(relicSectionRoot, item.data.relicName, item.price, item.sold,
                 () =>
                 {
                     if (shop.TryBuyRelic(captured)) RefreshUI();
-                });
+                },
+                locked: !shop.CanBuyRelicThisVisit);
         }
     }
 
@@ -129,13 +131,16 @@ public class ShopUI : MonoBehaviour
     // ── 유틸 ────────────────────────────────────────────
 
     private void CreateItemButton(Transform root, string label, int price, bool sold,
-                                  System.Action onClick)
+                                  System.Action onClick, bool locked = false)
     {
         var btn  = Instantiate(shopItemPrefab, root);
         var text = btn.GetComponentInChildren<TextMeshProUGUI>();
-        if (text != null) text.text = sold ? $"{label}\n[매진]" : $"{label}\n{price}G";
+        if (text != null)
+            text.text = sold   ? $"{label}\n[매진]"
+                      : locked ? $"{label}\n[이번 방문 구매 완료]"
+                      :          $"{label}\n{price}G";
 
-        btn.interactable = !sold && GameManager.Instance.PlayerGold >= price;
+        btn.interactable = !sold && !locked && GameManager.Instance.PlayerGold >= price;
         btn.onClick.AddListener(() => onClick());
     }
 

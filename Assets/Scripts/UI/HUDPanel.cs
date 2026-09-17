@@ -26,6 +26,7 @@ public class HUDPanel : MonoBehaviour
         gm.Player.Stats.OnHpChanged           += RefreshHp;
         gm.BoardPhaseManagerRef.OnPlayerGoldChanged += RefreshGold;
         gm.OnStageChanged                     += RefreshStage;
+        gm.BoardPhaseManagerRef.OnSectionChanged += RefreshSection;
 
         // RelicManager는 Awake 순서에 따라 아직 없을 수 있다
         if (RelicManager.Instance != null)
@@ -45,6 +46,7 @@ public class HUDPanel : MonoBehaviour
         gm.Player.Stats.OnHpChanged               -= RefreshHp;
         gm.BoardPhaseManagerRef.OnPlayerGoldChanged -= RefreshGold;
         gm.OnStageChanged                         -= RefreshStage;
+        gm.BoardPhaseManagerRef.OnSectionChanged    -= RefreshSection;
 
         if (RelicManager.Instance != null)
             RelicManager.Instance.OnRelicAdded -= OnRelicAdded;
@@ -65,7 +67,18 @@ public class HUDPanel : MonoBehaviour
 
     private void RefreshStage(int stage)
     {
-        if (stageText != null) stageText.text = $"Stage {stage}";
+        if (stageText == null) return;
+
+        // "바퀴 횟수"는 순환 보드 개념이라 폐기 — 구획 진행도를 함께 보인다 (v0.6)
+        var bpm = GameManager.Instance != null ? GameManager.Instance.BoardPhaseManagerRef : null;
+        stageText.text = bpm != null && bpm.SectionCount > 0
+                       ? $"Stage {stage} - 구획 {bpm.CurrentSection + 1}/{bpm.SectionCount}"
+                       : $"Stage {stage}";
+    }
+
+    private void RefreshSection(int _)
+    {
+        if (GameManager.Instance != null) RefreshStage(GameManager.Instance.CurrentStage + 1);
     }
 
     private void OnRelicAdded(RelicData relic, bool isPlayer)

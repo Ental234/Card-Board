@@ -13,8 +13,12 @@ public class MinionEntity : CombatEntity
 
     // ── 초기화 ──────────────────────────────────────────
 
+    // 조우 전투에서 살아남은 하수인을 다음 조우로 넘길 때 원본 데이터를 되짚는다
+    public MinionData Data { get; private set; }
+
     public void Initialize(MinionData data)
     {
+        Data         = data;
         IsPlayerSide = false;
 
         InitializeBase(

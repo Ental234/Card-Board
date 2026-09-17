@@ -46,6 +46,7 @@ public class UIManager : MonoBehaviour
 
         // 이벤트/상점 노드 처리
         GameManager.Instance.OnPlayerNodeEvent += HandlePlayerNodeEvent;
+        GameManager.Instance.OnShopRequested   += ShowShop;
 
         // 전투 보상 화면
         if (RewardManager.Instance != null)
@@ -72,6 +73,7 @@ public class UIManager : MonoBehaviour
         GameManager.Instance.OnStageChanged    -= OnStageChanged;
         GameManager.Instance.OnRunEnded        -= OnRunEnded;
         GameManager.Instance.OnPlayerNodeEvent -= HandlePlayerNodeEvent;
+        GameManager.Instance.OnShopRequested   -= ShowShop;
         GameManager.Instance.OnFormationChanged -= RefreshFormationBadge;
 
         if (RewardManager.Instance != null)
@@ -134,7 +136,7 @@ public class UIManager : MonoBehaviour
                 ShowEvent();
                 break;
             case NodeType.Shop:
-                ShowShop();
+                ShowShop(nodeIndex);
                 break;
         }
     }
@@ -157,14 +159,15 @@ public class UIManager : MonoBehaviour
         GameManager.Instance?.NotifyNodeResolved();   // 멈춰 있던 보드 턴 재개
     }
 
-    public void ShowShop()
+    // 재고는 상점 노드마다 독립이라 어느 노드의 상점인지 넘겨야 한다
+    public void ShowShop(int nodeIndex)
     {
         var gm = GameManager.Instance;
 
         // 패널을 먼저 켜야 ShopUI.OnEnable이 OnShopRefreshed를 구독한다.
         // 순서가 반대면 갱신 이벤트를 놓쳐 상품 목록이 비어 보인다.
         shopPanel?.SetActive(true);
-        ShopManager.Instance?.OpenShop(gm.Player.ClassTag);
+        ShopManager.Instance?.OpenShop(gm.Player.ClassTag, nodeIndex);
     }
 
     public void HideShop()

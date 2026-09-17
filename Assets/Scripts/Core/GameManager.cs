@@ -41,6 +41,9 @@ public class GameManager : MonoBehaviour
     [SerializeField] private int eliteNodeEnemyMin   = 2;
     [SerializeField] private int eliteNodeEnemyMax   = 3;
 
+    [Header("조우 전투")]
+    [SerializeField] private int encounterTurnLimit = 2;   // 조우지점·마계의 전령 전투 턴 상한 (최종 결전은 무제한)
+
     // ── 이벤트 ──────────────────────────────────────────
 
     public event Action<GamePhase> OnPhaseChanged;
@@ -50,6 +53,9 @@ public class GameManager : MonoBehaviour
     // 노드 이벤트 — UI·EventManager 등이 구독해서 처리
     public event Action<int, NodeType> OnPlayerNodeEvent; // (nodeIndex, type)
     public event Action<int, NodeType> OnBossNodeEvent;
+
+    // 상점 UI를 열어 달라는 요청 (nodeIndex) — 상점 노드 착지·보급소 이용 공용
+    public event Action<int> OnShopRequested;
 
     // ── 런타임 상태 ─────────────────────────────────────
 
@@ -61,6 +67,7 @@ public class GameManager : MonoBehaviour
     private List<MinionData>      bossMinions   = new();  // 보드 페이즈 중 보스가 축적한 하수인
     private bool                  isBossEncounter;        // 현재 전투가 보스 인카운터인지
     private bool                  lastCombatWasElite;     // 보상 등급 판정용
+    private List<MinionEntity>    spawnedEnemies = new(); // 이번 전투에 소환한 적 — 전투가 끝나면 정리한다
 
     // 보상 화면이 닫힌 뒤 실행할 후속 동작 (보드 재개 / 스테이지 전환 등)
     private Action pendingAfterReward;
@@ -145,6 +152,9 @@ public class GameManager : MonoBehaviour
         // (렐릭 섹션은 스테이지 안에서 유지되어야 보스 선점이 성립하므로 여기서만 비운다)
         ShopManager.Instance?.ResetStock();
 
+        // 보스 렐릭은 보스 객체 소유 — 새 보스는 빈손으로 시작한다
+        RelicManager.Instance?.ClearBossRelics();
+
         // 보스 초기화
         if (currentBoss != null)
             Destroy(currentBoss.gameObject);
@@ -167,10 +177,14 @@ public class GameManager : MonoBehaviour
 
     private void SubscribeBoardEvents()
     {
+        // 스테이지를 넘길 때 해제하지만, 혹시 남아 있어도 두 번 붙지 않도록 먼저 뗀다
+        UnsubscribeBoardEvents();
+
         boardPhaseManager.OnEncounterTriggered  += HandleEncounter;
         boardPhaseManager.OnPlayerLanded        += HandlePlayerLanded;
         boardPhaseManager.OnBossLanded          += HandleBossLanded;
         boardPhaseManager.OnBossAcquiresMinion  += HandleBossAcquiresMinion;
+        boardPhaseManager.OnSupplyShopRequested += HandleSupplyShopRequested;
     }
 
     private void UnsubscribeBoardEvents()
@@ -179,23 +193,38 @@ public class GameManager : MonoBehaviour
         boardPhaseManager.OnPlayerLanded        -= HandlePlayerLanded;
         boardPhaseManager.OnBossLanded          -= HandleBossLanded;
         boardPhaseManager.OnBossAcquiresMinion  -= HandleBossAcquiresMinion;
+        boardPhaseManager.OnSupplyShopRequested -= HandleSupplyShopRequested;
     }
 
     // ── 보드 이벤트 핸들러 ───────────────────────────────
 
-    // 플레이어와 보스가 같은 칸 → 인카운터(보스 전투)
-    private void HandleEncounter()
+    // 조우지점에 둘 다 모였다 → 조우 전투 (최종 결전만 턴 제한 없음)
+    private void HandleEncounter(EncounterKind kind)
+    {
+        StartBossCombat(kind == EncounterKind.Final ? 0 : encounterTurnLimit);
+    }
+
+    // 보스 전투 공용 — 조우지점·최종 결전·마계의 전령
+    private void StartBossCombat(int turnLimit)
     {
         isBossEncounter = true;
 
-        var minionEntities = SpawnMinions(bossMinions);
+        spawnedEnemies = SpawnMinions(bossMinions);
         boardPhaseManager.BeginResolution();   // 전투가 끝날 때까지 보드 턴 정지
         SetPhase(GamePhase.CombatPhase);
 
+        combatManager.OnCombatEnd -= HandleCombatEnd;
         combatManager.OnCombatEnd += HandleCombatEnd;
         // 진형에 세운 동료만 데려간다. 대기열까지 넘기면 전투에 없는 동료가
         // 턴을 받고 패턴까지 발동한다.
-        combatManager.StartCombat(playerCharacter, DeployedCompanions, currentBoss, minionEntities);
+        combatManager.StartCombat(playerCharacter, DeployedCompanions, currentBoss, spawnedEnemies, turnLimit);
+    }
+
+    // 보급소 이용 — 그 조우지점의 상점을 연다. 닫히면 UIManager가 NotifyNodeResolved로 게이트를 연다
+    private void HandleSupplyShopRequested(int nodeIndex)
+    {
+        boardPhaseManager.BeginResolution();
+        OnShopRequested?.Invoke(nodeIndex);
     }
 
     // 플레이어 노드 착지 — 노드 이벤트 라우팅
@@ -261,11 +290,13 @@ public class GameManager : MonoBehaviour
         // 그 전에는 플레이어가 상점을 열 때 보스 구매가 함께 돌아
         // "먼저 도착한 쪽이 선점한다"는 규칙이 성립하지 않았다.
         if (type == NodeType.Shop)
-            ShopManager.Instance?.BossVisitShop();
+            ShopManager.Instance?.BossVisitShop(nodeIndex);
     }
 
+    // 보스 진영은 보스 포함 4슬롯이라 하수인은 3마리까지만 거느린다
     private void HandleBossAcquiresMinion(MinionData minionData)
     {
+        if (bossMinions.Count >= BoardPhaseManager.MaxBossMinions) return;
         bossMinions.Add(minionData);
     }
 
@@ -297,12 +328,14 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("[GameManager] 적 생성에 실패해 전투를 건너뜁니다.");
             return;
         }
+        spawnedEnemies = enemies;
 
         isBossEncounter    = false;
         lastCombatWasElite = isElite;
         boardPhaseManager.BeginResolution();   // 전투가 끝날 때까지 보드 턴 정지
         SetPhase(GamePhase.CombatPhase);
 
+        combatManager.OnCombatEnd -= HandleCombatEnd;
         combatManager.OnCombatEnd += HandleCombatEnd;
         combatManager.StartCombat(playerCharacter, DeployedCompanions, bossEntity: null, minionList: enemies);
     }
@@ -313,9 +346,21 @@ public class GameManager : MonoBehaviour
     {
         combatManager.OnCombatEnd -= HandleCombatEnd;
 
+        CleanupSpawnedEnemies();
+
         if (!playerWon)
         {
             EndRun(playerWon: false);
+            return;
+        }
+
+        // 조우 전투가 턴 제한으로 끝났다 — 양쪽 다 살아 있다.
+        // 보상 화면 없이 보드로 돌아간다. 늦게 온 쪽의 보급과 다음 구획은 BoardPhaseManager가 잇는다.
+        if (isBossEncounter && combatManager.EndedByTurnLimit)
+        {
+            isBossEncounter = false;
+            SetPhase(GamePhase.BoardPhase);
+            boardPhaseManager.EndResolution();
             return;
         }
 
@@ -562,11 +607,12 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    // 이벤트 카드 '보스 순간이동' 효과
-    public void TeleportPlayerToBoss()
+    // 이벤트 '마계의 전령' — 플레이어가 스스로 고르는 추가 조우 (GDD 12장, v0.6 재설계).
+    // 조우지점과 같은 2턴 전투. 보스 HP는 누적되고, 진행 위치는 바뀌지 않는다.
+    public void StartHeraldEncounter()
     {
-        boardPhaseManager.TeleportPlayer(boardPhaseManager.BossPosition);
-        HandleEncounter();
+        if (currentBoss == null) return;
+        StartBossCombat(encounterTurnLimit);
     }
 
     // ── 골드 접근자 (UI용 편의 래퍼) ────────────────────
@@ -576,6 +622,23 @@ public class GameManager : MonoBehaviour
     public void AddPlayerGold(int amount)   => boardPhaseManager.AddPlayerGold(amount);
 
     // ── 내부 유틸 ────────────────────────────────────────
+
+    // 전투가 끝난 적 오브젝트를 정리한다.
+    // 보스 하수인은 **살아남은 것만** 다음 조우로 넘어간다 — 조우가 여러 번이 됐으므로
+    // 쓰러뜨린 하수인이 다음 조우에 되살아나면 깎은 의미가 없다.
+    private void CleanupSpawnedEnemies()
+    {
+        if (isBossEncounter)
+        {
+            bossMinions.Clear();
+            foreach (var m in spawnedEnemies)
+                if (m != null && m.IsActive && m.Data != null) bossMinions.Add(m.Data);
+        }
+
+        foreach (var m in spawnedEnemies)
+            if (m != null) Destroy(m.gameObject);
+        spawnedEnemies.Clear();
+    }
 
     // reserveBossSlot: 보스 인카운터에서는 보스가 슬롯을 먼저 차지하므로 비워둔다.
     //                  일반 노드 전투에는 보스가 없으므로 4슬롯을 모두 쓴다.

@@ -31,6 +31,14 @@ public class CombatManager : MonoBehaviour
     private bool combatActive;
     private bool playerTurnActive;
 
+    // ── 턴 제한 (조우 전투) ─────────────────────────────
+    // 0 = 무제한 (일반 전투·최종 결전). 조우 전투는 2턴에서 끊는다 (GDD 4장).
+    // 한 턴 = 플레이어 턴 + 적 턴 한 바퀴.
+    public int  TurnLimit        { get; private set; }
+    public int  CurrentRound     { get; private set; }   // 지금 진행 중인 턴 (1-based)
+    public bool EndedByTurnLimit { get; private set; }   // 직전 전투가 턴 제한으로 끝났는가
+    public int  RoundsLeft       => TurnLimit > 0 ? Mathf.Max(0, TurnLimit - CurrentRound + 1) : -1;
+
     // 패턴 실행 중 재진입 차단 (동료 패턴이 또 다른 패턴을 연쇄 발동시키는 것을 막는다)
     private bool patternRunning;
 
@@ -39,8 +47,13 @@ public class CombatManager : MonoBehaviour
     public void StartCombat(PlayerCharacter pc,
                             List<CompanionEntity> companionList,
                             BossEntity bossEntity       = null,
-                            List<MinionEntity> minionList = null)
+                            List<MinionEntity> minionList = null,
+                            int turnLimit                 = 0)
     {
+        TurnLimit        = Mathf.Max(0, turnLimit);
+        CurrentRound     = 0;
+        EndedByTurnLimit = false;
+
         player    = pc;
         companions = companionList ?? new List<CompanionEntity>();
         boss      = bossEntity;
@@ -130,6 +143,8 @@ public class CombatManager : MonoBehaviour
     {
         while (combatActive)
         {
+            CurrentRound++;
+
             // 플레이어 턴이 시작되기 '전'에 적의 다음 행동을 정한다.
             // 그래야 플레이어가 턴 내내 인텐트를 보고 이동·방어로 대응할 수 있다.
             DecideEnemyIntents();
@@ -138,6 +153,16 @@ public class CombatManager : MonoBehaviour
             if (!combatActive) yield break;
 
             yield return StartCoroutine(EnemyTurn());
+            if (!combatActive) yield break;
+
+            // 조우 전투 — 정해진 턴을 다 쓰면 양쪽 모두 살아 있는 채로 끝난다.
+            // 보스 HP는 깎인 채 유지되고 다음 조우로 넘어간다.
+            if (TurnLimit > 0 && CurrentRound >= TurnLimit)
+            {
+                EndedByTurnLimit = true;
+                EndCombat(playerWon: true);
+                yield break;
+            }
         }
     }
 
@@ -855,6 +880,10 @@ public class CombatManager : MonoBehaviour
             c.Stats.ClearCombatState();
         }
         player.Stats.ClearCombatState();
+
+        // 보스는 스테이지 내내 같은 인스턴스로 조우를 반복한다.
+        // HP는 누적이 규칙이지만 독·취약·방어막은 그 전투에서만 유효하다 (슬더스 관례).
+        boss?.Stats.ClearCombatState();
 
         OnCombatEnd?.Invoke(playerWon);
     }

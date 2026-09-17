@@ -13,7 +13,15 @@ MonoBehaviour:
   m_Name: "Stage_\uB358\uC804\uC785\uAD6C"
   m_EditorClassIdentifier: Assembly-CSharp::BoardStageData
   stageName: "\uB358\uC804 \uC785\uAD6C"
-  totalNodes: 20
+  sectionCount: 3
+  playerLaneCount: 2
+  laneLengthMin: 18
+  laneLengthMax: 24
+  crossLinksPerLanePair: 3
+  bossLaneCount: 2
+  bossCrossLinks: 2
+  shopPriorityWeight: 10
+  elitePriorityWeight: 8
   monsterRatio: 0.3
   eliteRatio: 0.1
   eventRatio: 0.2
@@ -21,6 +29,4 @@ MonoBehaviour:
   restRatio: 0.1
   treasureRatio: 0.1
   curseRatio: 0.05
-  salaryRatio: 0.03
-  bossStartNode: 10
   maxConsecutiveSameType: 2

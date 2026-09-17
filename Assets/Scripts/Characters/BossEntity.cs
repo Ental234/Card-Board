@@ -13,12 +13,13 @@ public class BossEntity : CombatEntity
     public bool IsPanicMode     { get; private set; }
 
     private float[] phaseThresholds;  // HP % 임계값 (내림차순 보장 필요)
-    private int      turnCount;
 
     // 보드 이동 AI용 데이터 (BoardPhaseManager가 읽음)
-    public int   BaseMoveDistance  { get; private set; }
-    public float PanicHpThreshold  { get; private set; }
-    public int   PanicTurnThreshold{ get; private set; }
+    public BossMoveStyle MoveStyle        { get; private set; }
+    public float         PanicHpThreshold { get; private set; }
+
+    // 실제로 보드에서 따르는 성향 — 패닉이면 선점형으로 뒤집힌다
+    public BossMoveStyle EffectiveMoveStyle => IsPanicMode ? BossMoveStyle.Rusher : MoveStyle;
 
     // ── 초기화 ──────────────────────────────────────────
 
@@ -37,15 +38,13 @@ public class BossEntity : CombatEntity
         SetSlot(data.bossSlot);
 
         phaseThresholds  = data.phaseThresholds;
-        BaseMoveDistance  = data.baseMoveDistance;
+        MoveStyle         = data.moveStyle;
         PanicHpThreshold  = data.panicHpThreshold;
-        PanicTurnThreshold= data.panicTurnThreshold;
 
         SetPatterns(data.patterns);
 
         CurrentPhase = 1;
         IsPanicMode  = false;
-        turnCount    = 0;
     }
 
     // ── 턴 흐름 ────────────────────────────────────────
@@ -53,18 +52,16 @@ public class BossEntity : CombatEntity
     public override void OnTurnStart()
     {
         base.OnTurnStart();
-        turnCount++;
 
         CheckPanic();
         CheckPhase();
     }
 
     // 보드 페이즈 턴 틱 — BoardPhaseManager가 매 보드 턴 호출.
-    // 전투용 OnTurnStart와 달리 방어막·상태이상 처리는 하지 않고
-    // 경과 턴만 세어 패닉 전환을 판정한다.
+    // 전투용 OnTurnStart와 달리 방어막·상태이상 처리는 하지 않는다.
+    // 보스 HP는 스테이지 내내 누적되므로 조우 전투에서 깎인 결과를 여기서 판정한다.
     public void OnBoardTurn()
     {
-        turnCount++;
         CheckPanic();
     }
 
@@ -74,8 +71,10 @@ public class BossEntity : CombatEntity
     {
         if (IsPanicMode) return;
 
+        if (stats.MaxHp <= 0) return;
+
         float hpRatio = (float)stats.CurrentHp / stats.MaxHp;
-        if (hpRatio <= PanicHpThreshold || turnCount >= PanicTurnThreshold)
+        if (hpRatio <= PanicHpThreshold)
             IsPanicMode = true;
     }
 

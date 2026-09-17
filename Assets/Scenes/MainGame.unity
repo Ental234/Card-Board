@@ -248,8 +248,11 @@ MonoBehaviour:
   boardPhaseManager: {fileID: 757543978}
   nodePrefab: {fileID: 4890958929385677551, guid: e453f2c98d15376439590135ce41d21f, type: 3}
   mapRoot: {fileID: 1798406792}
-  mapRadius: 300
-  branchOffset: 90
+  mapWidth: 1100
+  laneSpacing: 70
+  trackGap: 60
+  nodeScale: 0.75
+  encounterScale: 1.5
   edgeColor: {r: 0.45, g: 0.42, b: 0.38, a: 1}
   edgeThickness: 3
   playerIcon: {fileID: 780658767}
@@ -261,9 +264,11 @@ MonoBehaviour:
   restColor: {r: 0.3, g: 0.75, b: 0.4, a: 1}
   treasureColor: {r: 0.85, g: 0.65, b: 0.2, a: 1}
   curseColor: {r: 0.5, g: 0.2, b: 0.6, a: 1}
-  salaryColor: {r: 0.9, g: 0.8, b: 0.4, a: 1}
+  encounterColor: {r: 0.95, g: 0.95, b: 0.95, a: 1}
   emptyColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   startColor: {r: 0.3, g: 0.9, b: 0.9, a: 1}
+  bossTrackDim: 0.6
+  visitedDim: 0.45
 --- !u!224 &5251847
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3965,10 +3970,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BranchChoiceUI
   boardPhaseManager: {fileID: 757543978}
   mapView: {fileID: 5251846}
-  arrowColor: {r: 1, g: 0.85, b: 0.35, a: 1}
-  arrowThickness: 14
-  arrowLengthRate: 0.55
-  headSize: 24
+  highlightColor: {r: 1, g: 0.85, b: 0.35, a: 0.9}
+  highlightSize: 78
   labelFont: {fileID: 11400000, guid: e090fc50f736fe74b8924b9324b187c9, type: 2}
   labelSize: 16
   labelOffset: 34
@@ -4003,6 +4006,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoardPhaseManager
   boardGenerator: {fileID: 1499337804}
   combatManager: {fileID: 386474605}
+  campHealPercent: 0.3
+  supplyHealPercent: 0.1
 --- !u!4 &757543979
 Transform:
   m_ObjectHideFlags: 0
@@ -6835,7 +6840,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 51ab57cc6595fc3429a6d03057b1d8ea, type: 2}
   - {fileID: 11400000, guid: e1aa6ab91dbba754794844af47f2d7e6, type: 2}
   - {fileID: 11400000, guid: 4292549873f34d64c82ce7b845fca869, type: 2}
-  - {fileID: 11400000, guid: 7ed9dcf3f6b119c4d9b497aef8c1099c, type: 2}
   - {fileID: 11400000, guid: 7b221cc8c241f2e46994538b11dd4585, type: 2}
   - {fileID: 11400000, guid: ab3f3e4e853d9f9408b71e17cde82b0a, type: 2}
   allRelicPool:
@@ -7535,6 +7539,7 @@ MonoBehaviour:
   monsterNodeEnemyMax: 2
   eliteNodeEnemyMin: 2
   eliteNodeEnemyMax: 3
+  encounterTurnLimit: 2
 --- !u!1 &1319926166
 GameObject:
   m_ObjectHideFlags: 0
