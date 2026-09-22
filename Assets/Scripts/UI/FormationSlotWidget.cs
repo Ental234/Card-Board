@@ -25,6 +25,40 @@ public class FormationSlotWidget : MonoBehaviour,
         owner    = panel;
         Slot     = slot;
         Occupant = occupant;
+
+        if (occupant != null)
+            TooltipTrigger.Attach(gameObject, () => OccupantTooltip(Occupant));
+    }
+
+    private static (string, string) OccupantTooltip(CombatEntity unit)
+    {
+        if (unit == null) return ("", "");
+
+        var body = new System.Text.StringBuilder();
+        body.Append($"HP {unit.Stats.CurrentHp}/{unit.Stats.MaxHp}");
+
+        if (unit is PlayerCharacter)
+        {
+            body.Append("\n플레이어 - 대기열로 내릴 수 없다.");
+            return (unit.EntityName, body.ToString());
+        }
+
+        var data = (unit as CompanionEntity)?.Data;
+        if (data != null)
+        {
+            if (data.isImmobile) body.Append("\n이동 불가 - 전투 중 자리를 옮길 수 없다.");
+            if (!string.IsNullOrEmpty(data.description)) body.Append("\n\n").Append(data.description);
+        }
+
+        // 동료는 자동 행동한다 — 무엇을 하는지가 편성 판단의 전부다
+        foreach (var p in unit.Patterns)
+        {
+            if (p == null) continue;
+            body.Append($"\n\n[{p.patternName}]");
+            if (!string.IsNullOrEmpty(p.description)) body.Append($" {p.description}");
+        }
+
+        return (unit.EntityName, body.ToString());
     }
 
     // 옮길 대상이 없는 칸은 드래그를 시작할 수 없다
@@ -42,6 +76,7 @@ public class FormationSlotWidget : MonoBehaviour,
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (!CanDrag) return;
+        TooltipView.Hide(GetComponent<TooltipTrigger>());   // 끌고 다니는 동안 설명이 따라다니지 않게
         ghost = owner.CreateDragGhost(Occupant, eventData.position);
     }
 

@@ -20,8 +20,12 @@ public class CompanionEntity : CombatEntity
 
     // ── 초기화 ──────────────────────────────────────────
 
+    // 툴팁 등에서 원본 설명·패턴을 되짚는다
+    public CompanionData Data { get; private set; }
+
     public void Initialize(CompanionData data)
     {
+        Data = data;
         IsPlayerSide = true;
 
         InitializeBase(

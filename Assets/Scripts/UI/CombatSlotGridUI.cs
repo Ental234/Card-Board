@@ -308,7 +308,9 @@ public class CombatSlotGridUI : MonoBehaviour
             if (intent != null && enemy.IsActive)
             {
                 string text = intent.previewValue > 0 ? intent.previewValue.ToString() : IntentLabel(intent.kind);
-                BuildLabel(enemySlots[i], intentSize, IntentColor(intent.kind), Color.white, text);
+                var badge = BuildLabel(enemySlots[i], intentSize, IntentColor(intent.kind), Color.white, text);
+                var captured = intent;
+                TooltipTrigger.Attach(badge, () => IntentTooltip(captured));
             }
 
             // 플레이어 위협 수치.
@@ -329,7 +331,11 @@ public class CombatSlotGridUI : MonoBehaviour
                 else if (displayed > current) textColor = new Color(1f, 0.40f, 0.35f);     // 늘어난다
             }
 
-            BuildLabel(playerSlots[i], threatSize, background, textColor, displayed.ToString());
+            var threat = BuildLabel(playerSlots[i], threatSize, background, textColor, displayed.ToString());
+            int shown  = displayed;
+            TooltipTrigger.Attach(threat, () => ("받을 피해",
+                $"다음 적 턴에 이 칸이 받을 피해 합계 {shown}.\n" +
+                "취약까지 반영한 실제 수치이며, 방어막으로 막기 전 값이다. 자리를 옮기면 달라진다."));
         }
     }
 
@@ -358,7 +364,7 @@ public class CombatSlotGridUI : MonoBehaviour
         trigger.triggers.Add(entry);
     }
 
-    private void BuildLabel(SlotUI slotUI, Vector2 size, Color background, Color textColor, string text)
+    private GameObject BuildLabel(SlotUI slotUI, Vector2 size, Color background, Color textColor, string text)
     {
         Vector2 center = slotUI.GetComponent<RectTransform>().anchoredPosition;
 
@@ -373,7 +379,10 @@ public class CombatSlotGridUI : MonoBehaviour
 
         var img = go.AddComponent<Image>();
         img.color         = background;
-        img.raycastTarget = false;   // 슬롯 클릭을 가로채면 안 된다
+        img.raycastTarget = false;
+
+        // 툴팁을 붙이면 호버를 받게 되는데, 배지가 슬롯 윗변과 겹친다 — 그 부분 클릭은 슬롯으로 돌려보낸다
+        ClickForwarder.Attach(go, slotUI.gameObject);
 
         var labelGo = new GameObject("Text", typeof(RectTransform));
         labelGo.transform.SetParent(go.transform, false);
@@ -396,6 +405,55 @@ public class CombatSlotGridUI : MonoBehaviour
         label.fontStyle            = FontStyles.Normal;  // Neo둥근모는 볼드·이탤릭 금지
 
         intentLabels.Add(go);
+        return go;
+    }
+
+    private static (string, string) IntentTooltip(EnemyIntent intent)
+    {
+        if (intent == null) return ("", "");
+
+        var pattern = intent.pattern;
+        string title = pattern != null && !string.IsNullOrEmpty(pattern.patternName)
+                     ? pattern.patternName
+                     : IntentKindName(intent.kind);
+
+        var body = new System.Text.StringBuilder();
+        body.Append(IntentKindName(intent.kind));
+        if (intent.previewValue > 0)
+            body.Append(intent.kind == IntentKind.Heal || intent.kind == IntentKind.Buff
+                        ? $" - 수치 {intent.previewValue}"
+                        : $" - 예상 피해 {intent.previewValue}");
+
+        string slotsText = SlotListText(intent.previewSlots);
+        if (slotsText.Length > 0) body.Append($"\n노리는 칸: {slotsText}");
+
+        if (pattern != null && !string.IsNullOrEmpty(pattern.description))
+            body.Append("\n\n").Append(pattern.description);
+
+        return (title, body.ToString());
+    }
+
+    private static string SlotListText(SlotMask mask)
+    {
+        var parts = new List<string>();
+        for (int s = 1; s <= 4; s++)
+            if ((mask & (SlotMask)(1 << (s - 1))) != 0) parts.Add(s.ToString());
+        return string.Join(", ", parts);
+    }
+
+    private static string IntentKindName(IntentKind kind)
+    {
+        switch (kind)
+        {
+            case IntentKind.Attack:       return "공격";
+            case IntentKind.AttackAoe:    return "광역 공격";
+            case IntentKind.Debuff:       return "약화 부여";
+            case IntentKind.Buff:         return "강화";
+            case IntentKind.Heal:         return "회복";
+            case IntentKind.Taunt:        return "도발";
+            case IntentKind.SelfDestruct: return "자폭";
+            default:                      return "행동";
+        }
     }
 
     private void ClearIntentLabels()

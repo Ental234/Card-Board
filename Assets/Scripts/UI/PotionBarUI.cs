@@ -136,18 +136,11 @@ public class PotionBarUI : MonoBehaviour
         return name.Length > 4 ? name.Substring(0, 4) : name;
     }
 
+    // 포션은 카드가 아니라 소지품이라 카드 팝업이 아닌 공용 툴팁을 쓴다
     private void AddHover(GameObject go, CardData potion)
     {
-        var trigger = go.AddComponent<EventTrigger>();
-
-        var enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
-        enter.callback.AddListener(_ =>
-            UIManager.Instance?.ShowCardDetail(potion, go.transform.position));
-        trigger.triggers.Add(enter);
-
-        var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
-        exit.callback.AddListener(_ => UIManager.Instance?.HideCardDetail());
-        trigger.triggers.Add(exit);
+        TooltipTrigger.Attach(go, potion.cardName,
+            $"{potion.description}\n\n에너지를 쓰지 않는다. 클릭해서 사용");
     }
 
     private void ClearSlots()

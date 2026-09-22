@@ -396,10 +396,16 @@ public class BoardPhaseManager : MonoBehaviour
 
     // 이번 구획의 조우지점까지 최단 칸 수 (자기 트랙 기준). 이미 도착했으면 0.
     public int StepsToEncounter(int from, BoardTrack mover)
+        => StepsToEncounterOf(from, currentSection, mover);
+
+    // 지정한 구획의 조우지점까지 최단 칸 수. 맵 뷰가 노드 높이를 정할 때도 쓴다
+    // (높이 = 남은 칸 수라서 두 트랙의 말 높이를 그대로 비교할 수 있다)
+    public int StepsToEncounterOf(int from, int section, BoardTrack mover)
     {
         if (board == null || sectionEncounters == null) return -1;
+        if (section < 0 || section >= sectionEncounters.Length) return -1;
 
-        int target = sectionEncounters[currentSection];
+        int target = sectionEncounters[section];
         if (from == target) return 0;
 
         var dist  = new Dictionary<int, int> { [from] = 0 };

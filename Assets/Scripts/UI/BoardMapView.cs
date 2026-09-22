@@ -8,7 +8,11 @@ using UnityEngine.UI;
 // 배치 전략: 스테이지 전체를 **아래에서 위로** 한 번에 펼친다.
 //   맨 아래 = 시작 칸, 구획마다 위로 쌓이고 맨 위 = 최종 결전
 //   조우지점은 가운데 세로축, 왼쪽 = 플레이어 트랙, 오른쪽 = 보스 트랙
-//   노드의 y는 생성기가 심어 둔 진행도(progress), x는 갈래(lane)에서 나온다.
+//
+// **노드의 높이 = 그 구획 조우지점까지 남은 칸 수.** 두 트랙이 같은 눈금을 쓰므로
+// 내 말과 보스 말의 높이 차이가 곧 남은 칸 수 차이가 된다 — 숫자를 띄우지 않아도 경주가 읽힌다.
+// 짧은 갈래는 시작점에서 긴 선으로 이어져 "지름길"이라는 것이 모양으로 드러난다.
+// x는 갈래(lane)에서 나온다.
 // 아직 열리지 않은 구획은 어둡게 가린다. 구획이 열리면 서서히 드러난다 (나중에 안개 연출로 교체).
 // 한 화면에 다 안 들어가므로 맵 루트를 위아래로 움직여 말을 따라간다 (휠로 직접 훑어볼 수도 있다).
 // 격자에 맞추지 않는다 — 좌표 규칙은 GetNodePosition 하나로만 외부에 노출한다.
@@ -94,36 +98,24 @@ public class BoardMapView : MonoBehaviour
     private float   scrollTargetY;
     private float   maxFocusY;
 
-    // 진행도 표시 (런타임 생성 — 직렬화되면 가짜 참조가 남으므로 NonSerialized)
-    [System.NonSerialized] private TextMeshProUGUI statusText;
-    [System.NonSerialized] private TextMeshProUGUI logText;
-    private int   lastBossRoll;
-    private int   revealedBossRoll;
-    private float logClearTime;
+    // 보스 정보 패널 (런타임 생성 — 직렬화되면 가짜 참조가 남으므로 NonSerialized)
+    // 보스 HP·거리·주사위·하수인·렐릭은 전부 패널이 보여준다. 맵 위에 따로 텍스트를 띄우지 않는다.
+    [System.NonSerialized] private BossInfoPanelUI bossPanel;
 
     private void OnEnable()
     {
         boardPhaseManager.OnPositionsChanged  += OnPositionsChanged;
         boardPhaseManager.OnSectionChanged    += OnSectionChanged;
-        boardPhaseManager.OnBossDiceRolled    += OnBossDiceRolled;
-        boardPhaseManager.OnBossDiceRevealed  += OnBossDiceRevealed;
-        boardPhaseManager.OnEncounterLog      += ShowLog;
     }
 
     private void OnDisable()
     {
         boardPhaseManager.OnPositionsChanged  -= OnPositionsChanged;
         boardPhaseManager.OnSectionChanged    -= OnSectionChanged;
-        boardPhaseManager.OnBossDiceRolled    -= OnBossDiceRolled;
-        boardPhaseManager.OnBossDiceRevealed  -= OnBossDiceRevealed;
-        boardPhaseManager.OnEncounterLog      -= ShowLog;
     }
 
     private void Update()
     {
-        if (logText != null && !string.IsNullOrEmpty(logText.text) && Time.time >= logClearTime)
-            logText.text = "";
-
         if (positions.Count == 0) return;
 
         AnimateReveal();
@@ -136,7 +128,6 @@ public class BoardMapView : MonoBehaviour
 
         RefreshNodeTint();
         RefreshIcons();
-        RefreshStatus();
         FocusOn(boardPhaseManager.PlayerPosition);
     }
 
@@ -144,21 +135,7 @@ public class BoardMapView : MonoBehaviour
     private void OnSectionChanged(int _)
     {
         if (builtVersion != boardPhaseManager.BoardVersion) return;   // 새 스테이지는 BuildMap이 처리
-        RefreshStatus();
         FocusOn(boardPhaseManager.PlayerPosition);
-    }
-
-    private void OnBossDiceRolled(int value)
-    {
-        lastBossRoll     = value;
-        revealedBossRoll = 0;
-        RefreshStatus();
-    }
-
-    private void OnBossDiceRevealed(int value)
-    {
-        revealedBossRoll = value;
-        RefreshStatus();
     }
 
     // ── 맵 생성 ─────────────────────────────────────────
@@ -169,7 +146,9 @@ public class BoardMapView : MonoBehaviour
     public void BuildMap()
     {
         CaptureRootBase();
-        EnsureStatusTexts();
+        EnsureLegendButton();
+        EnsureDeckButton();
+        EnsureBossPanel();
 
         if (boardPhaseManager.TotalNodes == 0) return;
 
@@ -177,7 +156,6 @@ public class BoardMapView : MonoBehaviour
         {
             RefreshNodeTint();
             RefreshIcons();
-            RefreshStatus();
             FocusOn(boardPhaseManager.PlayerPosition, instant: true);
             return;
         }
@@ -197,7 +175,6 @@ public class BoardMapView : MonoBehaviour
 
         RefreshNodeTint();
         RefreshIcons();
-        RefreshStatus();
         FocusOn(boardPhaseManager.PlayerPosition, instant: true);
     }
 
@@ -236,22 +213,25 @@ public class BoardMapView : MonoBehaviour
 
         int sections = Mathf.Max(1, boardPhaseManager.SectionCount);
 
-        // 구획 높이는 그 구획의 가장 긴 갈래에 맞춘다 — 짧은 갈래는 노드 간격이 넓어진다
-        var longest = new int[sections];
-        var counts  = new Dictionary<(int, BoardTrack, int), int>();
+        // 노드마다 "이 구획 조우지점까지 남은 칸 수"를 재고, 구획 높이는 그 최대값으로 정한다
+        var remaining = new Dictionary<int, int>();
+        var deepest   = new int[sections];
+
         for (int i = 0; i < boardPhaseManager.TotalNodes; i++)
         {
             var n = boardPhaseManager.GetNode(i);
             if (n == null || n.track == BoardTrack.Shared) continue;
 
-            var key = (n.section, n.track, n.lane);
-            counts[key] = counts.TryGetValue(key, out int c) ? c + 1 : 1;
-            longest[n.section] = Mathf.Max(longest[n.section], counts[key]);
+            int steps = boardPhaseManager.StepsToEncounterOf(i, n.section, n.track);
+            if (steps < 0) steps = 1;                   // 도달 불가 (정상 보드에선 없음)
+            remaining[i] = steps;
+            deepest[n.section] = Mathf.Max(deepest[n.section], steps);
         }
 
+        // baseY[s] = 구획 s의 시작 높이, baseY[s+1] = 그 구획 조우지점 높이
         var baseY = new float[sections + 1];
         for (int s = 0; s < sections; s++)
-            baseY[s + 1] = baseY[s] + rowStep * (longest[s] + 1);
+            baseY[s + 1] = baseY[s] + rowStep * (deepest[s] + 1);
 
         for (int i = 0; i < boardPhaseManager.TotalNodes; i++)
         {
@@ -268,7 +248,8 @@ public class BoardMapView : MonoBehaviour
             }
             else
             {
-                float y    = Mathf.Lerp(baseY[n.section], baseY[n.section + 1], n.progress);
+                // 조우지점에서 남은 칸 수만큼 아래로 — 같은 높이면 남은 거리가 같다
+                float y    = baseY[n.section + 1] - remaining[i] * rowStep;
                 float dist = trackOffsetX + n.lane * laneGapX;
                 positions[i] = new Vector2(n.track == BoardTrack.Player ? -dist : dist, y);
             }
@@ -461,85 +442,16 @@ public class BoardMapView : MonoBehaviour
         mapRoot.anchoredPosition = rootBasePos + new Vector2(0f, focusBias - scrollY);
     }
 
-    // ── 진행도 표시 ─────────────────────────────────────
-    //
-    // "보스가 조우지점까지 몇 칸 남았나"가 안 보이면 짧은 길 / 돌아가는 길 선택이 작동하지 않는다.
-    // 무조건 긴 길이 정답이 된다 (GDD 14장 — 필수 표시 요소). 세로 맵이라 오른쪽 여백에 둔다.
+    // ── 보스 정보 패널 ──────────────────────────────────
 
-    private void EnsureStatusTexts()
+    private void EnsureBossPanel()
     {
-        if (statusText == null) statusText = CreateText("BoardStatus", -150f, 22);
-        if (logText    == null) logText    = CreateText("BoardLog",    -320f, 22);
-    }
-
-    private TextMeshProUGUI CreateText(string name, float y, int size)
-    {
-        var parent = PanelRoot;
-        if (parent == null) return null;
-
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.70f, 1f);
-        rt.anchorMax = new Vector2(0.98f, 1f);
-        rt.pivot     = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(0f, y);
-        rt.sizeDelta = new Vector2(0f, size * 7f);
-
-        var tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.fontSize         = size;
-        tmp.alignment        = TextAlignmentOptions.TopLeft;
-        tmp.raycastTarget    = false;
-        tmp.enableAutoSizing = false;
-        tmp.color            = new Color(1f, 0.93f, 0.75f);
-
-        var font = nodePrefab != null ? nodePrefab.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-        if (font != null && font.font != null)
+        if (bossPanel == null && PanelRoot != null)
         {
-            tmp.font               = font.font;
-            tmp.fontSharedMaterial = font.font.material;
+            var label = nodePrefab != null ? nodePrefab.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+            bossPanel = BossInfoPanelUI.Create(PanelRoot, boardPhaseManager, label != null ? label.font : null, bossIcon);
         }
-        return tmp;
-    }
-
-    private void RefreshStatus()
-    {
-        if (statusText == null || boardPhaseManager.TotalNodes == 0) return;
-
-        var enc = boardPhaseManager.CurrentEncounter;
-        string encName = enc == null ? "" : EncounterName(enc.encounterKind);
-
-        string me   = boardPhaseManager.PlayerAtEncounter ? "도착 - 대기 중" : $"최단 {boardPhaseManager.PlayerStepsToEncounter}칸";
-        string boss = boardPhaseManager.BossAtEncounter   ? "도착 - 무장 중" : $"최단 {boardPhaseManager.BossStepsToEncounter}칸";
-
-        var bossEntity = GameManager.Instance != null ? GameManager.Instance.CurrentBoss : null;
-        string style = bossEntity == null ? ""
-                     : bossEntity.IsPanicMode ? "선점형(패닉)"
-                     : bossEntity.MoveStyle == BossMoveStyle.Rusher ? "선점형" : "수집형";
-        string hp    = bossEntity == null ? "" : $"{bossEntity.Stats.CurrentHp}/{bossEntity.Stats.MaxHp}";
-        int minions  = GameManager.Instance != null ? GameManager.Instance.BossMinions.Count : 0;
-
-        string dice = revealedBossRoll > 0 ? $"\n다음 주사위 {revealedBossRoll} (예언)"
-                    : lastBossRoll     > 0 ? $"\n직전 주사위 {lastBossRoll}" : "";
-        string freeze = boardPhaseManager.BossFreezeTurns > 0 ? $"\n속박 {boardPhaseManager.BossFreezeTurns}턴" : "";
-
-        statusText.text =
-            $"구획 {boardPhaseManager.CurrentSection + 1}/{boardPhaseManager.SectionCount} - {encName}\n" +
-            $"나: {me}\n" +
-            $"보스: {boss}\n" +
-            $"보스 HP {hp} / 하수인 {minions}\n" +
-            $"성향: {style}{dice}{freeze}";
-    }
-
-    private void ShowLog(string message)
-    {
-        CaptureRootBase();
-        EnsureStatusTexts();
-        if (logText == null) return;
-        logText.text  = message;
-        logClearTime  = Time.time + 3f;
-        RefreshStatus();
+        bossPanel?.RefreshNow();
     }
 
     // ── 외부 조회 (목적지 선택 하이라이트 배치 등) ──────
@@ -609,6 +521,131 @@ public class BoardMapView : MonoBehaviour
         },
         _                  => "·",
     };
+
+    // ── 노드 범례 ("?" 버튼) ────────────────────────────
+    //
+    // 노드마다 툴팁을 달면 맵 위를 지나갈 때마다 설명이 튀어나와 시끄럽다.
+    // 보드 화면 한쪽의 "?"에 호버하면 노드 종류별 핵심만 한 번에 보여준다.
+    // 글자색은 맵의 노드 색과 같게 칠해 범례와 맵이 바로 대응되게 한다.
+
+    [System.NonSerialized] private GameObject legendButton;
+
+    // 보드의 작은 정사각 버튼 — "?"와 "덱"이 같은 모양을 쓴다
+    private GameObject CreateSquareButton(string name, string label, Vector2 topLeft)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(PanelRoot, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot            = new Vector2(0f, 1f);
+        rt.anchoredPosition = topLeft;
+        rt.sizeDelta        = new Vector2(48f, 48f);
+
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.30f, 0.25f, 0.18f, 0.95f);
+
+        var textGo = new GameObject("Label", typeof(RectTransform));
+        textGo.transform.SetParent(go.transform, false);
+        var trt = textGo.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = trt.offsetMax = Vector2.zero;
+
+        var tmp = textGo.AddComponent<TextMeshProUGUI>();
+        tmp.text          = label;
+        tmp.fontSize      = label.Length > 1 ? 16 : 32;   // 16px 배수
+        tmp.alignment     = TextAlignmentOptions.Center;
+        tmp.raycastTarget = false;
+        tmp.color         = new Color(1f, 0.9f, 0.6f);
+        var font = nodePrefab != null ? nodePrefab.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+        if (font != null && font.font != null) { tmp.font = font.font; tmp.fontSharedMaterial = font.font.material; }
+        return go;
+    }
+
+    // ── 덱 보기 버튼 ────────────────────────────────────
+
+    [System.NonSerialized] private GameObject deckButton;
+
+    private void EnsureDeckButton()
+    {
+        if (deckButton != null || PanelRoot == null) return;
+
+        deckButton = CreateSquareButton("DeckButton", "덱", new Vector2(70f, -220f));   // "?" 아래
+        var btn = deckButton.AddComponent<Button>();
+        btn.targetGraphic = deckButton.GetComponent<Image>();
+        btn.onClick.AddListener(OpenDeck);
+        TooltipTrigger.Attach(deckButton, "덱 보기", "전투 덱과 보드 카드를 본다.");
+    }
+
+    private void OpenDeck()
+    {
+        var player = GameManager.Instance != null ? GameManager.Instance.Player : null;
+        if (player == null) return;
+
+        DeckViewerUI.Show(PanelRoot, "내 덱",
+            new DeckViewerUI.Section("전투 덱", DeckViewerUI.Sorted(player.DeckManager.GetAllCards())),
+            new DeckViewerUI.Section("보드 카드", DeckViewerUI.Sorted(player.BoardCardManager.GetAllCards())));
+    }
+
+    private void EnsureLegendButton()
+    {
+        if (legendButton != null || PanelRoot == null) return;
+
+        legendButton = new GameObject("NodeLegendButton", typeof(RectTransform));
+        legendButton.transform.SetParent(PanelRoot, false);
+
+        var rt = legendButton.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot            = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(70f, -160f);   // 편성 버튼 아래
+        rt.sizeDelta        = new Vector2(48f, 48f);
+
+        var img = legendButton.AddComponent<Image>();
+        img.color = new Color(0.30f, 0.25f, 0.18f, 0.95f);
+
+        var textGo = new GameObject("Label", typeof(RectTransform));
+        textGo.transform.SetParent(legendButton.transform, false);
+        var trt = textGo.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = trt.offsetMax = Vector2.zero;
+
+        var tmp = textGo.AddComponent<TextMeshProUGUI>();
+        tmp.text          = "?";
+        tmp.fontSize      = 32;                  // 16px 배수
+        tmp.alignment     = TextAlignmentOptions.Center;
+        tmp.raycastTarget = false;
+        tmp.color         = new Color(1f, 0.9f, 0.6f);
+        var font = nodePrefab != null ? nodePrefab.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+        if (font != null && font.font != null) { tmp.font = font.font; tmp.fontSharedMaterial = font.font.material; }
+
+        TooltipTrigger.Attach(legendButton, () => ("노드 안내", BuildLegend()), width: 420f);
+    }
+
+    private string BuildLegend()
+    {
+        string Line(Color c, string label, string name, string desc)
+            => $"<color=#{ColorUtility.ToHtmlStringRGB(c)}>{label}</color>  {name} - {desc}";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(Line(monsterColor,  "몬", "몬스터", "일반 전투. 카드·골드"));
+        sb.AppendLine(Line(eliteColor,    "정", "정예",   "강한 전투. 렐릭"));
+        sb.AppendLine(Line(eventColor,    "?",  "이벤트", "선택지 사건"));
+        sb.AppendLine(Line(shopColor,     "상", "상점",   "구매. 렐릭은 방문당 1개"));
+        sb.AppendLine(Line(restColor,     "휴", "휴식",   "HP 회복"));
+        sb.AppendLine(Line(treasureColor, "보", "보물",   "전투 없이 보상"));
+        sb.AppendLine(Line(curseColor,    "저", "저주",   "HP 상실 (방어막 무시)"));
+        sb.AppendLine();
+        sb.AppendLine(Line(encounterColor, "보급", "보급소", "선착 시 상점 + 대기 턴마다 보급"));
+        sb.AppendLine(Line(encounterColor, "야영", "야영지", "선착 시 HP 회복 + 대기 턴마다 보급"));
+        sb.AppendLine(Line(encounterColor, "결전", "최종 결전", "턴 제한 없는 보스전"));
+        sb.AppendLine("조우 전투는 2턴. 늦게 온 쪽은 전투 먼저, 보급은 나중");
+        sb.AppendLine();
+        sb.AppendLine("왼쪽 = 내 길 / 오른쪽 어두운 길 = 보스의 길");
+        sb.Append("보스: 몬스터·정예에서 하수인, 상점에서 렐릭 획득");
+        return sb.ToString();
+    }
 
     public static string EncounterName(EncounterKind kind) => kind switch
     {

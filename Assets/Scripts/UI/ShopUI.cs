@@ -67,7 +67,8 @@ public class ShopUI : MonoBehaviour
                 () =>
                 {
                     if (shop.TryBuyCard(captured)) RefreshUI();
-                });
+                },
+                tooltip: item.data.description);
         }
     }
 
@@ -83,7 +84,8 @@ public class ShopUI : MonoBehaviour
                 {
                     if (shop.TryBuyRelic(captured)) RefreshUI();
                 },
-                locked: !shop.CanBuyRelicThisVisit);
+                locked: !shop.CanBuyRelicThisVisit,
+                tooltip: item.data.description + "\n\n렐릭은 방문당 1개. 보스가 먼저 오면 사 간다.");
         }
     }
 
@@ -97,7 +99,8 @@ public class ShopUI : MonoBehaviour
                 () =>
                 {
                     if (shop.TryBuyPotion(captured)) RefreshUI();
-                });
+                },
+                tooltip: item.data.description + "\n\n포션은 품절되지 않는다. 소지 한도까지 살 수 있다.");
         }
     }
 
@@ -111,7 +114,8 @@ public class ShopUI : MonoBehaviour
                 () =>
                 {
                     if (shop.TryBuyCompanion(captured)) RefreshUI();
-                });
+                },
+                tooltip: $"HP {item.data.maxHp}\n{item.data.description}\n\n산 동료는 대기열로 간다. 편성창에서 배치할 것.");
         }
     }
 
@@ -131,9 +135,10 @@ public class ShopUI : MonoBehaviour
     // ── 유틸 ────────────────────────────────────────────
 
     private void CreateItemButton(Transform root, string label, int price, bool sold,
-                                  System.Action onClick, bool locked = false)
+                                  System.Action onClick, bool locked = false, string tooltip = null)
     {
         var btn  = Instantiate(shopItemPrefab, root);
+        TooltipTrigger.Attach(btn.gameObject, label, tooltip);
         var text = btn.GetComponentInChildren<TextMeshProUGUI>();
         if (text != null)
             text.text = sold   ? $"{label}\n[매진]"

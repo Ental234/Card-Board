@@ -248,11 +248,15 @@ MonoBehaviour:
   boardPhaseManager: {fileID: 757543978}
   nodePrefab: {fileID: 4890958929385677551, guid: e453f2c98d15376439590135ce41d21f, type: 3}
   mapRoot: {fileID: 1798406792}
-  mapWidth: 1100
-  laneSpacing: 70
-  trackGap: 60
+  rowStep: 52
+  trackOffsetX: 110
+  laneGapX: 120
   nodeScale: 0.75
   encounterScale: 1.5
+  focusBias: -120
+  followSpeed: 6
+  wheelSpeed: 90
+  viewportTopInset: 100
   edgeColor: {r: 0.45, g: 0.42, b: 0.38, a: 1}
   edgeThickness: 3
   playerIcon: {fileID: 780658767}
@@ -269,6 +273,8 @@ MonoBehaviour:
   startColor: {r: 0.3, g: 0.9, b: 0.9, a: 1}
   bossTrackDim: 0.6
   visitedDim: 0.45
+  hiddenColor: {r: 0.1, g: 0.1, b: 0.12, a: 1}
+  revealTime: 0.9
 --- !u!224 &5251847
 RectTransform:
   m_ObjectHideFlags: 0

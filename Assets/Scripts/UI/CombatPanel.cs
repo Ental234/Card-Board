@@ -30,6 +30,10 @@ public class CombatPanel : MonoBehaviour
     // 조우 전투 남은 턴 — 턴 제한이 있는 전투에서만 보인다 (런타임 생성)
     private TextMeshProUGUI roundText;
 
+    // 더미 보기 버튼 (뽑을 / 버린 / 소모) — 런타임 생성, 장수는 매 프레임 비교해 바뀔 때만 고친다
+    private TextMeshProUGUI drawPileLabel, discardPileLabel, exhaustPileLabel;
+    private int shownDraw = -1, shownDiscard = -1, shownExhaust = -1;
+
     // ── 활성화 ──────────────────────────────────────────
 
     private void OnEnable()
@@ -84,6 +88,7 @@ public class CombatPanel : MonoBehaviour
         endTurnButton.interactable = false;
 
         EnsurePotionBar();
+        EnsurePileButtons();
         potionBar?.Bind(player.PotionManager, energyText != null ? energyText.font : null);
 
         RefreshEnergy(player.DeckManager.CurrentEnergy, player.DeckManager.MaxEnergy);
@@ -98,6 +103,7 @@ public class CombatPanel : MonoBehaviour
         pendingPotion = null;
         endTurnButton.interactable = false;
         if (roundText != null) roundText.gameObject.SetActive(false);
+        DeckViewerUI.Close();
 
         if (player == null) return;
         player.DeckManager.OnHandChanged   -= OnHandChanged;
@@ -220,6 +226,102 @@ public class CombatPanel : MonoBehaviour
         }
 
         waitingForTarget = false;
+    }
+
+    // ── 더미 보기 ────────────────────────────────────────
+    //
+    // 슬더스처럼 뽑을 더미·버린 더미·소모 더미를 언제든 열어볼 수 있게 한다.
+    // 소모 카드가 실제로 소모 더미로 가는지 확인하는 수단이기도 하다 (3단계 소모 카드 검증용).
+
+    private void EnsurePileButtons()
+    {
+        if (drawPileLabel != null) return;
+
+        drawPileLabel    = CreatePileButton("DrawPileButton",    2, OpenDrawPile);
+        discardPileLabel = CreatePileButton("DiscardPileButton", 1, OpenDiscardPile);
+        exhaustPileLabel = CreatePileButton("ExhaustPileButton", 0, OpenExhaustPile);
+        shownDraw = shownDiscard = shownExhaust = -1;
+    }
+
+    // 오른쪽 아래에 가로로 나란히. indexFromRight 0이 맨 오른쪽
+    private TextMeshProUGUI CreatePileButton(string name, int indexFromRight, System.Action onClick)
+    {
+        const float w = 150f, h = 40f, gap = 8f;
+
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot            = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-24f - indexFromRight * (w + gap), 20f);
+        rt.sizeDelta        = new Vector2(w, h);
+
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.20f, 0.18f, 0.15f, 0.95f);
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+        btn.onClick.AddListener(() => onClick());
+
+        var labelGo = new GameObject("Label", typeof(RectTransform));
+        labelGo.transform.SetParent(go.transform, false);
+        var lrt = labelGo.GetComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero;
+        lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+
+        var label = labelGo.AddComponent<TextMeshProUGUI>();
+        label.fontSize      = 16;   // 16px 배수
+        label.alignment     = TextAlignmentOptions.Center;
+        label.color         = new Color(0.95f, 0.90f, 0.80f);
+        label.raycastTarget = false;
+        if (energyText != null) { label.font = energyText.font; label.fontSharedMaterial = energyText.fontSharedMaterial; }
+        return label;
+    }
+
+    private void Update()
+    {
+        if (player == null || drawPileLabel == null) return;
+
+        var deck = player.DeckManager;
+        if (deck.DrawPileCount != shownDraw)
+        {
+            shownDraw = deck.DrawPileCount;
+            drawPileLabel.text = $"뽑을 더미 {shownDraw}";
+        }
+        if (deck.DiscardPileCount != shownDiscard)
+        {
+            shownDiscard = deck.DiscardPileCount;
+            discardPileLabel.text = $"버린 더미 {shownDiscard}";
+        }
+        if (deck.ExhaustPileCount != shownExhaust)
+        {
+            shownExhaust = deck.ExhaustPileCount;
+            exhaustPileLabel.text = $"소모 {shownExhaust}";
+        }
+    }
+
+    // 뽑을 더미는 순서가 곧 정보라 정렬해서 보여준다 — 다음에 뭐가 나올지 들키면 안 된다
+    private void OpenDrawPile()
+    {
+        if (player == null) return;
+        DeckViewerUI.Show(transform as RectTransform, "뽑을 더미",
+            new DeckViewerUI.Section(null, DeckViewerUI.Sorted(player.DeckManager.DrawPile)));
+    }
+
+    private void OpenDiscardPile()
+    {
+        if (player == null) return;
+        DeckViewerUI.Show(transform as RectTransform, "버린 더미",
+            new DeckViewerUI.Section(null, DeckViewerUI.Sorted(player.DeckManager.DiscardPile)));
+    }
+
+    private void OpenExhaustPile()
+    {
+        if (player == null) return;
+        DeckViewerUI.Show(transform as RectTransform, "소모 더미",
+            new DeckViewerUI.Section(null, DeckViewerUI.Sorted(player.DeckManager.ExhaustPile)));
     }
 
     // 포션 바를 처음 한 번만 만든다. 전투가 끝나도 오브젝트는 남기고 Bind만 풀어

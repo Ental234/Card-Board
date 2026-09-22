@@ -26,6 +26,15 @@ public class BoardCardManager : MonoBehaviour
     public int                     DrawPileCount      => drawPile.Count;
     public int                     DiscardPileCount   => discardPile.Count;
 
+    // 덱 보기 창용 — 손패·뽑을 더미·버린 더미 전부
+    public List<CardData> GetAllCards()
+    {
+        var all = new List<CardData>(hand);
+        all.AddRange(drawPile);
+        all.AddRange(discardPile);
+        return all;
+    }
+
     // ── 런 시작 ────────────────────────────────────────
 
     public void InitDeck(IEnumerable<CardData> startingDeck)

@@ -192,7 +192,11 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
 
         var img = go.AddComponent<Image>();
         img.color         = StatusColor(status);
-        img.raycastTarget = false;   // 슬롯 클릭을 가로채면 안 된다
+        img.raycastTarget = false;
+
+        // 툴팁을 위해 호버를 받는다. 칩은 슬롯 바깥 아래에 있지만, 겹치는 클릭은 슬롯으로 돌려보낸다
+        TooltipTrigger.Attach(go, () => (StatusLabel(status), StatusDescription(status)));
+        ClickForwarder.Attach(go, gameObject);
 
         var labelGo = new GameObject("Text", typeof(RectTransform));
         labelGo.transform.SetParent(go.transform, false);
@@ -229,6 +233,37 @@ public class SlotUI : MonoBehaviour, IPointerClickHandler
             // 나머지는 언제 풀리는지가 중요하다
             default:
                 return Occupant.Stats.GetStatusDuration(status);
+        }
+    }
+
+    // 칩 숫자의 뜻이 종류마다 달라(스택 / 남은 턴) 툴팁에서 풀어 쓴다.
+    // 수치는 CombatStats의 실제 계산과 같아야 한다 — 취약 1.5배, 약화 0.75배
+    private string StatusDescription(StatusEffect status)
+    {
+        if (Occupant == null) return "";
+
+        int stacks = Occupant.Stats.GetStatusStacks(status);
+        int turns  = Occupant.Stats.GetStatusDuration(status);
+        string left = turns >= 99 ? "전투 내내 유지" : $"{turns}턴 남음";
+
+        switch (status)
+        {
+            case StatusEffect.Bleed:
+                return $"턴이 시작될 때마다 {stacks} 피해를 입는다. 스택은 줄지 않는다.\n{left}";
+            case StatusEffect.Poison:
+                return $"턴이 시작될 때마다 {stacks} 피해를 입고, 그 뒤 스택이 1 줄어든다.\n{left}";
+            case StatusEffect.Burn:
+                return $"턴이 시작될 때마다 {stacks} 피해를 입는다.\n{left}";
+            case StatusEffect.Stun:
+                return $"행동할 수 없다. 자리 이동은 할 수 있다.\n{left}";
+            case StatusEffect.Taunt:
+                return $"상대의 단일 대상 공격이 이 유닛에게 향한다.\n{left}";
+            case StatusEffect.Weak:
+                return $"주는 피해가 25% 줄어든다.\n{left}";
+            case StatusEffect.Vulnerable:
+                return $"받는 피해가 50% 늘어난다.\n{left}";
+            default:
+                return "";
         }
     }
 

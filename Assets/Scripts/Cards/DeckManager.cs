@@ -25,6 +25,12 @@ public class DeckManager : MonoBehaviour
     public int                     MaxEnergy     => maxEnergy;
     public int                     DrawPileCount    => drawPile.Count;
     public int                     DiscardPileCount => discardPile.Count;
+    public int                     ExhaustPileCount => exhaustPile.Count;
+
+    // 더미 보기 창용 읽기 전용 목록. 뽑을 더미는 순서가 곧 정보이므로 보여줄 때 정렬할 것
+    public IReadOnlyList<CardData> DrawPile    => drawPile;
+    public IReadOnlyList<CardData> DiscardPile => discardPile;
+    public IReadOnlyList<CardData> ExhaustPile => exhaustPile;
 
     // ── 런 시작 ────────────────────────────────────────
 

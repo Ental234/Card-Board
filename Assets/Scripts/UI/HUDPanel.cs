@@ -87,5 +87,7 @@ public class HUDPanel : MonoBehaviour
 
         var icon = Instantiate(relicIconPrefab, relicIconRoot);
         if (relic.icon != null) icon.sprite = relic.icon;
+
+        TooltipTrigger.Attach(icon.gameObject, relic.relicName, relic.description);
     }
 }

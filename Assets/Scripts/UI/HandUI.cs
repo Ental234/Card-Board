@@ -7,6 +7,9 @@ using UnityEngine;
 public class HandUI : MonoBehaviour
 {
     [SerializeField] private CardUI       cardPrefab;
+
+    // 덱 보기 창이 손패와 같은 카드 모양을 쓰도록 빌려준다
+    public CardUI CardPrefab => cardPrefab;
     [SerializeField] private RectTransform handRoot;
 
     [Header("팬 레이아웃")]
