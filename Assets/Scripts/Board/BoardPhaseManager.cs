@@ -39,6 +39,7 @@ public class BoardPhaseManager : MonoBehaviour
     public event Action<int>            OnBossGoldChanged;
 
     public event Action<List<int>>      OnDestinationChoiceRequested; // 도달 가능 노드 — UI가 하나를 고른다
+    public event Action<int>            OnRerollOffered;              // 재굴림 카드 — 이 값으로 갈지 다시 굴릴지 UI가 묻는다
     public event Action                 OnPositionsChanged;           // 말 위치가 바뀜 (맵 아이콘·진행도)
     public event Action<int>            OnSectionChanged;             // (새 구획, 0-based)
 
@@ -293,6 +294,26 @@ public class BoardPhaseManager : MonoBehaviour
         OnDiceRolled?.Invoke(steps);
         yield return new WaitForSeconds(0.3f);
 
+        // 재굴림 카드 — 결과를 보고 나서 다시 굴릴지 고른다.
+        // 다시 굴리면 새 값을 그대로 쓴다 (더 낮게 나와도). 주사위 강화 보너스는 두 번 모두 붙는다.
+        if (allowRerollOnce && OnRerollOffered != null)
+        {
+            rerollDecision = null;
+            pendingRerollValue = steps;
+            OnRerollOffered.Invoke(steps);
+
+            yield return new WaitUntil(() => rerollDecision.HasValue);
+            pendingRerollValue = 0;
+
+            if (rerollDecision.Value)
+            {
+                steps = RollDice();
+                OnDiceRolled?.Invoke(steps);
+                yield return new WaitForSeconds(0.3f);
+            }
+        }
+        allowRerollOnce = false;   // 한 번만
+
         var candidates = GetLandingCandidates(playerPosition, steps, BoardTrack.Player, anyDistanceOnce);
         if (candidates.Count == 0) yield break;   // 정상 보드에선 발생하지 않음
 
@@ -322,15 +343,15 @@ public class BoardPhaseManager : MonoBehaviour
     private int RollDice()
     {
         int roll = UnityEngine.Random.Range(1, 7);  // 1d6
-
-        if (allowRerollOnce)
-        {
-            int reroll = UnityEngine.Random.Range(1, 7);
-            roll = Mathf.Max(roll, reroll);  // 재굴림 시 더 높은 값 사용
-        }
-
         return Mathf.Max(1, roll + diceBonusOnce);
     }
+
+    // 재굴림 선택 — UI가 SubmitReroll(true=다시 굴림 / false=이대로)로 답한다
+    private bool? rerollDecision;
+    [NonSerialized] private int pendingRerollValue;   // 0이 아니면 선택 대기 중 (UI 복구용)
+
+    public void SubmitReroll(bool reroll) => rerollDecision = reroll;
+    public int  PendingRerollValue       => pendingRerollValue;
 
     // ── 경로 탐색 (일방통행 그래프) ──────────────────────
 
