@@ -18,14 +18,29 @@ MonoBehaviour:
   cardType: 0
   rangeType: 2
   classTag: 0
+  rarity: 10
   energyCost: 2
   useableSlots: 15
   targetSlots: 15
   targetAlly: 1
   isAoe: 1
+  autoTarget: 0
+  targetMode: 0
   targetSelf: 0
   effects:
   - type: 2
     value: 4
     status: 0
     duration: 0
+  exhaust: 0
+  unplayable: 0
+  turnEndInHandEffects: []
+  scope: 0
+  upgrade1:
+    effects: []
+    costDelta: 0
+    description: 
+  upgrade2:
+    effects: []
+    costDelta: 0
+    description: 

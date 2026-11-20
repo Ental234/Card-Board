@@ -386,7 +386,7 @@ public class BossInfoPanelUI : MonoBehaviour, UnityEngine.EventSystems.IPointerE
             {
                 if (r == null) continue;
                 var chip = AddChip(relicGrid, r.relicName, new Color(0.40f, 0.33f, 0.14f, 0.95f));
-                TooltipTrigger.Attach(chip, r.relicName, r.description);
+                TooltipTrigger.Attach(chip, RarityTable.Colorize(r.relicName, r.rarity), r.description);
             }
         }
         relicGrid.gameObject.SetActive(count > 0);

@@ -24,9 +24,8 @@ MonoBehaviour:
   elitePriorityWeight: 8
   monsterRatio: 0.3
   eliteRatio: 0.1
-  eventRatio: 0.2
+  eventRatio: 0.25
   shopRatio: 0.1
   restRatio: 0.1
   treasureRatio: 0.1
-  curseRatio: 0.05
   maxConsecutiveSameType: 2

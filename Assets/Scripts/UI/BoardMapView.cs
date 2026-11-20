@@ -633,9 +633,8 @@ public class BoardMapView : MonoBehaviour
         sb.AppendLine(Line(eliteColor,    "정", "정예",   "강한 전투. 렐릭"));
         sb.AppendLine(Line(eventColor,    "?",  "이벤트", "선택지 사건"));
         sb.AppendLine(Line(shopColor,     "상", "상점",   "구매. 렐릭은 방문당 1개"));
-        sb.AppendLine(Line(restColor,     "휴", "휴식",   "HP 회복"));
+        sb.AppendLine(Line(restColor,     "휴", "휴식",   "HP 회복 또는 강화"));
         sb.AppendLine(Line(treasureColor, "보", "보물",   "전투 없이 보상"));
-        sb.AppendLine(Line(curseColor,    "저", "저주",   "HP 상실 (방어막 무시)"));
         sb.AppendLine();
         sb.AppendLine(Line(encounterColor, "보급", "보급소", "선착 시 상점 + 대기 턴마다 보급"));
         sb.AppendLine(Line(encounterColor, "야영", "야영지", "선착 시 HP 회복 + 대기 턴마다 보급"));

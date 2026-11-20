@@ -48,7 +48,7 @@ public enum NodeType
     Shop,     // 상점: 카드·렐릭·포션·동료 구매
     Rest,     // 휴식: HP 회복 or 카드 업그레이드
     Treasure, // 보물: 렐릭·카드·동료 무료 획득
-    Curse,    // 저주: 부정 효과
+    Curse,    // 폐기 (2026-09-27) — 일방적 손해만 주는 칸이라 이벤트로 통합했다. 뒤 번호를 지키려고 남겨둠
     Salary,   // 월급 — 폐기 (v0.6). 생성하지 않는다. 번호 유지를 위해 남겨둠
     Encounter,// 조우지점: 구획의 끝. 두 트랙이 합류한다 (종류는 NodeData.encounterKind)
 }
@@ -81,9 +81,15 @@ public enum SupplyChoice
 {
     Shop,       // 구매 (보급소에서만)
     Heal,       // HP 회복(소)
-    Upgrade,    // 카드 강화 — 강화 시스템 미구현
-    RemoveCard, // 카드 제거 — 대기 메뉴용 선택 UI 미구현
+    Upgrade,    // 카드·동료 강화 1회
+    RemoveCard, // 카드 제거 — 3단계 2번에서 연결
     Skip,       // 아무것도 안 함
+
+    // 조우지점 전용 기능 — "다음 조우 전투 준비" (GDD 4장). 전부 넣고 6-A에서 걸러낸다
+    Fortify,        // 전열 정비: 다음 조우 1턴 방어막
+    Ambush,         // 기습 준비: 다음 조우 1턴 에너지 +1
+    Trap,           // 함정 설치: 다음 조우 시작 시 하수인 1명 기절
+    TrainCompanion, // 동료 훈련: 동료 1명 강화
 }
 
 // 카드 효과 종류 (전투 카드 + 보드 카드 공용)
@@ -106,6 +112,9 @@ public enum EffectType
     BoardFreezeBoss,  // 속박의 사슬 (value = 봉쇄 턴 수)
     BoardRevealNodes, // 예언의 주사위 (value = 미리 볼 칸 수)
     BoardBlockMinion, // 하수인 차단 (1회)
+
+    // 끝에 덧붙인다 (직렬화 번호)
+    LoseHp,           // HP 상실 — 피격이 아니라서 방어막·취약·피격 트리거를 타지 않는다 (저주 '고통')
 }
 
 // 행동 패턴 발동 타이밍 (동료·적 공용)

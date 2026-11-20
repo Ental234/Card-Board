@@ -30,16 +30,26 @@ public class CardUI : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler,
         new(0.72f, 0.64f, 0.40f), // Universal — 금색
     };
 
+    // 저주는 직업과 무관하게 보라 — 옛 저주 노드 색과 같은 계열
+    private static readonly Color CurseColor = new(0.50f, 0.20f, 0.60f);
+
     public void Setup(CardData data, bool usable)
     {
         Data     = data;
         IsUsable = usable;
 
-        if (cardNameText    != null) cardNameText.text    = data.cardName;
-        if (costText        != null) costText.text        = data.energyCost.ToString();
+        if (cardNameText    != null)
+        {
+            cardNameText.text = data.cardName;
+            // 등급은 이름 글자색으로 (DESIGN D-2). 테두리는 직업색이 쓰고 있다.
+            // 저주는 등급이 뜻이 없어 흰색 — 필드 기본값(일반)과 같지만 저주에 등급을 매겨도 색이 새지 않게 막는다
+            cardNameText.color = data.IsCurse ? Color.white : RarityTable.NameColor(data.rarity);
+        }
+        // 사용 불가 카드는 비용이 뜻이 없다. 0으로 보이면 "공짜로 쓸 수 있다"로 읽힌다
+        if (costText        != null) costText.text        = data.unplayable ? "-" : data.energyCost.ToString();
         if (descriptionText != null) descriptionText.text = data.description;
         if (artworkImage    != null && data.artwork != null) artworkImage.sprite = data.artwork;
-        if (frameImage      != null) frameImage.color = ClassColors[(int)data.classTag];
+        if (frameImage      != null) frameImage.color = data.IsCurse ? CurseColor : ClassColors[(int)data.classTag];
 
         RefreshAlpha();
     }

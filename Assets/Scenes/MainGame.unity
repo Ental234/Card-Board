@@ -940,7 +940,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 57a6fd6726be18846afbf790623c2971, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MetaProgressionManager
-  allUnlocks: []
+  allUnlocks:
+  - {fileID: 11400000, guid: 5b2b2e69bae51e84c8ee2a27d68134e5, type: 2}
+  - {fileID: 11400000, guid: b4335329509bbb1459482a3d2c864023, type: 2}
+  - {fileID: 11400000, guid: 0641d5c0558f1044c9e4ebc008a2bd75, type: 2}
 --- !u!1 &122265109
 GameObject:
   m_ObjectHideFlags: 0
@@ -6484,6 +6487,10 @@ MonoBehaviour:
   - {fileID: 11400000, guid: c20d1ba22b66964448c4c452cad0463c, type: 2}
   - {fileID: 11400000, guid: 2d10dbe895af32d418a1c455904934e2, type: 2}
   - {fileID: 11400000, guid: bf3b5504c002cb847bd28f46814ff351, type: 2}
+  - {fileID: 11400000, guid: 4269c563e09190b4eb06efcf7a9e6f15, type: 2}
+  - {fileID: 11400000, guid: 1437def20322eb2479fdd3dcfe801cc1, type: 2}
+  - {fileID: 11400000, guid: a3a70604e8b57194991e489cb5180b87, type: 2}
+  - {fileID: 11400000, guid: 79f70a2fcb56bda4eb32e34292822538, type: 2}
 --- !u!1 &1122866192
 GameObject:
   m_ObjectHideFlags: 0
@@ -6848,6 +6855,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 4292549873f34d64c82ce7b845fca869, type: 2}
   - {fileID: 11400000, guid: 7b221cc8c241f2e46994538b11dd4585, type: 2}
   - {fileID: 11400000, guid: ab3f3e4e853d9f9408b71e17cde82b0a, type: 2}
+  - {fileID: 11400000, guid: 5c20426ef7f15504f81e4baa1a3e93dc, type: 2}
+  - {fileID: 11400000, guid: cc005750f33b53f4fb28363bd3e66d32, type: 2}
   allRelicPool:
   - {fileID: 11400000, guid: 95378f14281caa64e8abf9e6dc735ba6, type: 2}
   - {fileID: 11400000, guid: f1f57dc5341fab44083e0f841796ab0b, type: 2}
@@ -7540,12 +7549,18 @@ MonoBehaviour:
   startingCharacter: {fileID: 11400000, guid: e5123adbc3b797645ba1fd26d1a557f9, type: 2}
   skipMainMenu: 0
   restHealPercent: 0.3
-  curseHpLoss: 8
   monsterNodeEnemyMin: 1
   monsterNodeEnemyMax: 2
   eliteNodeEnemyMin: 2
   eliteNodeEnemyMax: 3
   encounterTurnLimit: 2
+  fortifyShield: 8
+  ambushEnergy: 1
+  trapStunTurns: 1
+  curseCards:
+  - {fileID: 11400000, guid: 612feb002f7bcd2469206b267a18631f, type: 2}
+  - {fileID: 11400000, guid: 8fccdd74ad01df146bace3bb576f05e1, type: 2}
+  - {fileID: 11400000, guid: 835312ea15091c24cbe658889335072a, type: 2}
 --- !u!1 &1319926166
 GameObject:
   m_ObjectHideFlags: 0
@@ -8944,6 +8959,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: ab3f3e4e853d9f9408b71e17cde82b0a, type: 2}
   - {fileID: 11400000, guid: 8ccea62b965c0cf4f8434fa48a66a8a0, type: 2}
   - {fileID: 11400000, guid: 0ac36e12512221b4b98f0fc7831e440b, type: 2}
+  - {fileID: 11400000, guid: 5c20426ef7f15504f81e4baa1a3e93dc, type: 2}
+  - {fileID: 11400000, guid: cc005750f33b53f4fb28363bd3e66d32, type: 2}
   rewardRelicPool:
   - {fileID: 11400000, guid: f1f57dc5341fab44083e0f841796ab0b, type: 2}
   - {fileID: 11400000, guid: 95378f14281caa64e8abf9e6dc735ba6, type: 2}

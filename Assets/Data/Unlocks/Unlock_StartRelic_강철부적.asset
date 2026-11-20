@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: "Unlock_StartRelic_\uAC15\uCCA0\uBD80\uC801"
+  m_EditorClassIdentifier: Assembly-CSharp::UnlockData
+  unlockId: start_relic_steel_amulet
+  displayName: "\uC2DC\uC791 \uB810\uB9AD: \uAC15\uCCA0 \uBD80\uC801"
+  description: "\uB7F0\uC744 \uC2DC\uC791\uD560 \uB54C \uAC15\uCCA0 \uBD80\uC801\uC744
+    \uACE0\uB97C \uC218 \uC788\uB2E4."
+  requiredPoints: 50
+  type: 2
+  card: {fileID: 0}
+  character: {fileID: 0}
+  relic: {fileID: 11400000, guid: f1f57dc5341fab44083e0f841796ab0b, type: 2}

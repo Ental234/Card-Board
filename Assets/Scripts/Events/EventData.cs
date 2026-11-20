@@ -14,6 +14,7 @@ public enum EventEffectType
     GainCompanion,   // 동료 획득
     TeleportToBoss,  // 보스 위치 순간이동 → 강제 인카운터
     Nothing,
+    UpgradeCard,     // value 1 = 일반 강화(카드·동료 +1) / 2 = 특별 강화(카드 +2, 무작위 페널티) — 끝에 덧붙인다(직렬화 번호)
 }
 
 [Serializable]

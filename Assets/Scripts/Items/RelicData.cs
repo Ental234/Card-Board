@@ -11,6 +11,7 @@ public enum RelicTrigger
     OnKillEnemy,         // 적 처치 시
     OnTakeDamage,        // 피해 받을 때
     OnBoardTurnStart,    // 보드 턴 시작 시
+    OnCombatWin,         // 전투에서 이겼을 때 (적 전멸·보스 처치). 조우 전투가 턴 제한으로 끝난 건 이긴 게 아니라 제외 — 끝에 덧붙인다(직렬화 번호)
 }
 
 // 렐릭 효과 종류
@@ -42,6 +43,7 @@ public class RelicData : ScriptableObject
     [TextArea]
     public string            description;
     public Sprite            icon;
+    public Rarity            rarity;   // 추첨 비중·상점 가격·이름 색. 시작 렐릭은 Unique (추첨 제외)
 
     [Header("효과")]
     public List<RelicEffect> effects = new();

@@ -34,7 +34,6 @@ public class BoardStageData : ScriptableObject
     [Range(0, 1)] public float shopRatio     = 0.10f;
     [Range(0, 1)] public float restRatio     = 0.10f;
     [Range(0, 1)] public float treasureRatio = 0.10f;
-    [Range(0, 1)] public float curseRatio    = 0.05f;
 
     [Header("배치 제약")]
     public int maxConsecutiveSameType = 2;

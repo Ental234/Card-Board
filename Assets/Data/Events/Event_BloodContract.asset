@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17b9a0537e049a9469634408f3de369b, type: 3}
+  m_Name: Event_BloodContract
+  m_EditorClassIdentifier: Assembly-CSharp::EventData
+  eventName: "\uD53C \uBB3B\uC740 \uACC4\uC57D\uC11C"
+  description: "\uBC14\uC704 \uC704\uC5D0 \uBD89\uC740 \uC789\uD06C\uB85C \uC4F4
+    \uACC4\uC57D\uC11C\uAC00 \uB193\uC5EC \uC788\uB2E4. \uC11C\uBA85\uB780 \uC606\uC5D0
+    \uAE08\uD654 \uC8FC\uBA38\uB2C8\uAC00 \uBB36\uC5EC \uC788\uB2E4."
+  choices:
+  - label: "\uC11C\uBA85\uD55C\uB2E4"
+    effectDescription: "\uACE8\uB4DC +120. \uC800\uC8FC '\uACE0\uD1B5' 1\uC7A5\uC744
+      \uC5BB\uB294\uB2E4"
+    effects:
+    - type: 2
+      value: 120
+      card: {fileID: 0}
+      relic: {fileID: 0}
+      companion: {fileID: 0}
+    - type: 4
+      value: 0
+      card: {fileID: 11400000, guid: 8fccdd74ad01df146bace3bb576f05e1, type: 2}
+      relic: {fileID: 0}
+      companion: {fileID: 0}
+    requiresGold: 0
+    goldCost: 0
+  - label: "\uCC22\uC5B4 \uBC84\uB9B0\uB2E4"
+    effectDescription: "\uC544\uBB34 \uC77C\uB3C4 \uC77C\uC5B4\uB098\uC9C0 \uC54A\uB294\uB2E4"
+    effects:
+    - type: 9
+      value: 0
+      card: {fileID: 0}
+      relic: {fileID: 0}
+      companion: {fileID: 0}
+    requiresGold: 0
+    goldCost: 0

@@ -49,6 +49,12 @@ public class BoardPhaseManager : MonoBehaviour
     public event Action<int>            OnSupplyShopRequested;
     // 조우지점 알림 (UI 로그용) — "보스가 렐릭을 샀다" 등
     public event Action<string>         OnEncounterLog;
+    // 대기 메뉴 강화 (true = 동료만) — 구독자(GameManager)가 고르는 창을 열고 NotifySupplyPickResult로 답한다
+    public event Action<bool>           OnSupplyUpgradeRequested;
+    // 대기 메뉴 카드 제거 (무료 — 그 턴의 보급 1회가 대가) — 같은 방식으로 답한다
+    public event Action                 OnSupplyRemoveRequested;
+    // 대기 메뉴 "다음 조우 준비" 선택 — 구독자(GameManager)가 다음 보스 전투에 적용한다
+    public event Action<SupplyChoice>   OnEncounterPrepChosen;
 
     // ── 상태 ────────────────────────────────────────────
 
@@ -512,19 +518,33 @@ public class BoardPhaseManager : MonoBehaviour
         }
         else
         {
-            pendingSupply        = null;
-            pendingSupplyRequest = encounter;
-            OnPlayerSupplyRequested?.Invoke(encounter);
+            // 강화 창에서 취소하면 메뉴로 돌아온다 — 보급 1회를 날리지 않는다
+            do
+            {
+                supplyCancelled      = false;
+                pendingSupply        = null;
+                pendingSupplyRequest = encounter;
+                OnPlayerSupplyRequested?.Invoke(encounter);
 
-            if (OnPlayerSupplyRequested != null)
-                yield return new WaitUntil(() => pendingSupply.HasValue);
+                if (OnPlayerSupplyRequested != null)
+                    yield return new WaitUntil(() => pendingSupply.HasValue);
 
-            pendingSupplyRequest = null;
-            choice = pendingSupply ?? SupplyChoice.Heal;
+                pendingSupplyRequest = null;
+                choice = pendingSupply ?? SupplyChoice.Heal;
+
+                yield return StartCoroutine(ApplyPlayerSupply(encounter, choice, immediate));
+            }
+            while (supplyCancelled);
+            yield break;
         }
 
         yield return StartCoroutine(ApplyPlayerSupply(encounter, choice, immediate));
     }
+
+    // 대기 메뉴 고르는 창(강화·카드 제거) 결과 (GameManager가 알린다) — false = 취소
+    private bool? upgradeResult;
+    private bool  supplyCancelled;
+    public  void  NotifySupplyPickResult(bool done) => upgradeResult = done;
 
     private IEnumerator ApplyPlayerSupply(NodeData encounter, SupplyChoice choice, bool immediate)
     {
@@ -544,9 +564,35 @@ public class BoardPhaseManager : MonoBehaviour
                 OnEncounterLog?.Invoke($"HP {amount} 회복");
                 break;
 
-            // 강화·제거는 대기 메뉴용 UI가 아직 없다 — UI가 비활성으로 표시한다
             case SupplyChoice.Upgrade:
+            case SupplyChoice.TrainCompanion:
+                if (OnSupplyUpgradeRequested == null) break;
+                upgradeResult = null;
+                OnSupplyUpgradeRequested.Invoke(choice == SupplyChoice.TrainCompanion);
+                yield return new WaitUntil(() => upgradeResult.HasValue);
+                if (!upgradeResult.Value) supplyCancelled = true;
+                break;
+
+            case SupplyChoice.Fortify:
+            case SupplyChoice.Ambush:
+            case SupplyChoice.Trap:
+                OnEncounterPrepChosen?.Invoke(choice);
+                OnEncounterLog?.Invoke(choice switch
+                {
+                    SupplyChoice.Fortify => "전열 정비 - 다음 조우 전투 1턴에 방어막",
+                    SupplyChoice.Ambush  => "기습 준비 - 다음 조우 전투 1턴에 에너지 +1",
+                    _                    => "함정 설치 - 다음 조우 전투에서 하수인 1명 기절",
+                });
+                break;
+
             case SupplyChoice.RemoveCard:
+                if (OnSupplyRemoveRequested == null) break;
+                upgradeResult = null;
+                OnSupplyRemoveRequested.Invoke();
+                yield return new WaitUntil(() => upgradeResult.HasValue);
+                if (!upgradeResult.Value) supplyCancelled = true;
+                break;
+
             case SupplyChoice.Skip:
                 break;
         }

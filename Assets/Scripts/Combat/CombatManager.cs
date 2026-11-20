@@ -200,9 +200,27 @@ public class CombatManager : MonoBehaviour
         // 뒤에 두면 동료의 드로우 패턴이 버려진 직후에 뽑아 다음 턴 드로우와 겹친다.
         yield return StartCoroutine(RunCompanionPatterns(TriggerTiming.TurnEnd));
 
+        // 동료 턴 종료 패턴 뒤, 손패를 버리기(player.OnTurnEnd) 전이어야 한다.
+        // 뒤에 두면 손패가 이미 비어 있어 발동할 카드가 없다.
+        TriggerHandTurnEndEffects();
+        if (!combatActive) yield break;   // 저주로 HP를 잃고 쓰러졌을 수 있다
+
         player.OnTurnEnd();
         foreach (var c in companions) c.OnTurnEnd();
         OnEntityTurnEnd?.Invoke(player);
+    }
+
+    // 손패에 든 채 턴이 끝나면 발동하는 카드 (저주 '고통' 등). 대상은 항상 플레이어 자신이다
+    private void TriggerHandTurnEndEffects()
+    {
+        // 효과가 손패를 바꿀 수 있으니 복사본을 돈다
+        var hand = new List<CardData>(player.DeckManager.Hand);
+        foreach (var card in hand)
+        {
+            if (card.turnEndInHandEffects == null) continue;
+            foreach (var effect in card.turnEndInHandEffects)
+                ExecuteEffect(effect, player, player);
+        }
     }
 
     // ── 포지션 직접 이동 (화살표 조작) ───────────────────
@@ -660,6 +678,11 @@ public class CombatManager : MonoBehaviour
                 if (player != null && user.IsPlayerSide)
                     player.DeckManager.GainEnergy(effect.value);
                 break;
+
+            // 피격이 아니라 상실 — 방어막·취약·피격 트리거를 타지 않는다
+            case EffectType.LoseHp:
+                target.LoseHp(effect.value);
+                break;
         }
     }
 
@@ -880,6 +903,15 @@ public class CombatManager : MonoBehaviour
             c.Stats.ClearCombatState();
         }
         player.Stats.ClearCombatState();
+
+        // 소모 더미는 전투 단위 — 손패·버린 더미·소모 더미를 전부 덱으로 되돌린다
+        player.DeckManager.ResetForCombat();
+        // 되돌린 뒤에 지운다 — 전투 단위 저주가 손패·소모 더미에 있어도 빠짐없이 사라진다
+        player.DeckManager.RemoveCombatScopedCards();
+
+        // 전투 승리 렐릭 (전사의 피 등). 조우 전투가 턴 제한으로 끝난 건 양쪽 다 살아 있으니 이긴 게 아니다
+        if (playerWon && !EndedByTurnLimit)
+            RelicManager.Instance?.TriggerPlayerRelics(RelicTrigger.OnCombatWin);
 
         // 보스는 스테이지 내내 같은 인스턴스로 조우를 반복한다.
         // HP는 누적이 규칙이지만 독·취약·방어막은 그 전투에서만 유효하다 (슬더스 관례).

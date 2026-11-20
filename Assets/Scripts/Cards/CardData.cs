@@ -4,6 +4,14 @@ public enum CardType
 {
     Combat,  // 전투 페이즈에서만 사용
     Board,   // 보드 페이즈(주사위 굴리기 전)에서만 사용
+    Curse,   // 저주 — 전투 덱에 섞이는 나쁜 카드. 강화·일반 카드 제거 대상이 아니다 (3단계 4번)
+}
+
+// 카드가 덱에 머무는 기간. 번호는 직렬화 규칙대로 구간을 비워 둔다
+public enum CardScope
+{
+    Run    = 0,   // 제거하기 전까지 덱에 남는다 (기본값 — 기존 카드는 전부 이것)
+    Combat = 10,  // 다음 전투가 끝나면 덱에서 사라진다. 전투 밖에서 얻으면 그다음 전투까지 들고 간다
 }
 
 // 카드가 어디까지 닿는가. 무기 종류가 아니라 **도달 범위**를 뜻한다 —
@@ -30,6 +38,27 @@ public class CardEffect
     public int          duration;  // 상태이상 지속 턴
 }
 
+// 강화 한 단계의 정의 (GDD 9장 — 강화 데이터는 원본 에셋 안에 적는다)
+// 전부 비워 두면 자동 규칙: 피해·방어막·회복 수치 +30% (최소 +2), 설명 속 숫자도 자동으로 바뀐다.
+[System.Serializable]
+public class CardUpgrade
+{
+    // 비어 있지 않으면 효과 목록 전체를 이것으로 바꾼다 — 수치 변경과 효과 추가 모두 여기서
+    public CardEffect[] effects;
+    public int          costDelta;               // -1이면 비용 1 감소
+    [TextArea] public string description;        // 비워 두면 설명 속 숫자만 자동으로 바꾼다
+}
+
+// 특별 강화(+2를 한 번에)의 대가. 번호는 직렬화 규칙대로 구간을 비워 둔다
+public enum CardPenalty
+{
+    None      = 0,
+    CostUp    = 10,  // 비용 +1
+    Exhaust   = 20,  // 쓰면 그 전투에서 소모 더미로
+    FrontOnly = 30,  // 1·2번 슬롯에서만 사용
+    AddCurse  = 40,  // 저주 카드 1장이 덱에 들어온다
+}
+
 [CreateAssetMenu(fileName = "NewCard", menuName = "Game/Card Data")]
 public class CardData : ScriptableObject
 {
@@ -42,6 +71,7 @@ public class CardData : ScriptableObject
     public CardType  cardType;
     public RangeType rangeType;
     public ClassTag  classTag;
+    public Rarity    rarity;    // 추첨 비중·상점 가격·이름 색. 저주·물약도 필드는 있지만 저주는 추첨 풀에 없어 쓰이지 않는다
 
     [Header("비용")]
     public int energyCost;  // 전투 카드: 에너지 소모. 보드 카드: 0이면 1회 소모 무료
@@ -69,6 +99,37 @@ public class CardData : ScriptableObject
 
     [Header("효과")]
     public CardEffect[] effects;
+
+    [Header("소모")]
+    public bool exhaust;   // true = 쓰면 버린 더미가 아니라 소모 더미로 간다 (그 전투 동안 돌아오지 않음)
+
+    // ── 특수 규칙 ──────────────────────────────────────
+    // 저주는 아래 속성을 **조합해서** 만든다 (2026-09-27 결정). 저주 전용 코드를 따로 두지 않는다.
+    //   짐     = unplayable
+    //   고통   = unplayable + turnEndInHandEffects(HP 상실)
+    //   망설임 = 사용 가능(비용 1) + exhaust  — 에너지를 내고 이번 전투에서 치워 버리는 저주
+    //   상처   = unplayable + scope Combat
+    // 속성 자체는 저주 전용이 아니라서, 일반 카드에 붙여도 그대로 동작한다.
+    [Header("특수 규칙")]
+    public bool         unplayable;             // 사용 불가 — 손패 한 칸을 차지하는 죽은 패
+    public CardEffect[] turnEndInHandEffects;   // 손패에 든 채 플레이어 턴이 끝나면 발동 (대상은 플레이어 자신)
+    public CardScope    scope;                  // 덱에 머무는 기간
+
+    [Header("강화 (비워 두면 자동 규칙)")]
+    public CardUpgrade upgrade1;   // + 로 가는 단계
+    public CardUpgrade upgrade2;   // ++ 로 가는 단계
+
+    // ── 런타임 강화 복제본 정보 ──────────────────────────
+    // 강화는 "그 한 장만" 복제해서 한다 (같은 카드 4장 중 1장만 강화되게). 복제본만 이 값을 가진다.
+    // NonSerialized — 에셋에 저장되지 않고, 에디터 플레이 진입 직렬화에도 휘말리지 않는다.
+    [System.NonSerialized] public int         upgradeLevel;
+    [System.NonSerialized] public CardData    baseCard;
+    [System.NonSerialized] public CardPenalty penalty;
+
+    // "같은 카드인가" 판정은 이걸로 한다 — 강화된 타격도 원본은 타격이다
+    public CardData Original => baseCard != null ? baseCard : this;
+
+    public bool IsCurse => cardType == CardType.Curse;
 
     // ── 사거리 계산 ──────────────────────────────────────
     //

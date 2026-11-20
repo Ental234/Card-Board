@@ -53,6 +53,7 @@ public class ShopUI : MonoBehaviour
         BuildRelicButtons(shop);
         BuildPotionButtons(shop);
         BuildCompanionButtons(shop);
+        RefreshRemoveButton();
     }
 
     // ── 섹션별 버튼 생성 ─────────────────────────────────
@@ -63,7 +64,7 @@ public class ShopUI : MonoBehaviour
         foreach (var item in shop.Cards)
         {
             var captured = item;
-            CreateItemButton(cardSectionRoot, item.data.cardName, item.price, item.sold,
+            CreateItemButton(cardSectionRoot, RarityTable.Colorize(item.data.cardName, item.data.rarity), item.price, item.sold,
                 () =>
                 {
                     if (shop.TryBuyCard(captured)) RefreshUI();
@@ -79,7 +80,7 @@ public class ShopUI : MonoBehaviour
         {
             var captured = item;
             // 렐릭은 방문당 1개 — 하나 사면 나머지는 잠긴다 (선점 경쟁)
-            CreateItemButton(relicSectionRoot, item.data.relicName, item.price, item.sold,
+            CreateItemButton(relicSectionRoot, RarityTable.Colorize(item.data.relicName, item.data.rarity), item.price, item.sold,
                 () =>
                 {
                     if (shop.TryBuyRelic(captured)) RefreshUI();
@@ -121,15 +122,25 @@ public class ShopUI : MonoBehaviour
 
     // ── 카드 제거 서비스 ─────────────────────────────────
 
+    // 공용 카드 제거 창(GameManager.OpenRemovePicker)을 연다. 골드는 고른 뒤에 받는다
     private void OnRemoveCardClicked()
     {
-        // EventUI의 카드 제거 UI 재사용 — EventManager를 통해 선택 UI 표시
-        var allCards = GameManager.Instance.Player.DeckManager.GetAllCards();
-        if (allCards.Count == 0) return;
+        var shop = ShopManager.Instance;
+        if (shop == null || !shop.CanRemoveCardThisVisit) return;
 
-        // 상점 카드 제거는 골드 차감 후 DeckManager.RemoveCard 직접 호출
-        // 선택 UI는 EventManager의 RemoveCard 흐름 활용
-        EventManager.Instance.RequestCardRemoval(allCards);
+        GameManager.Instance.OpenRemovePicker($"덱에서 뺄 카드를 고르세요 ({shop.CardRemovePrice}골드)",
+            shop.CardRemovePrice, onDone: RefreshUI, onCancel: null);
+    }
+
+    private void RefreshRemoveButton()
+    {
+        var shop = ShopManager.Instance;
+        if (removeCardButton == null || shop == null) return;
+        removeCardButton.interactable = shop.CanRemoveCardThisVisit
+                                     && GameManager.Instance.PlayerGold >= shop.CardRemovePrice
+                                     && GameManager.Instance.Player.DeckManager.CanRemoveCard;
+        if (removeCardPriceText != null)
+            removeCardPriceText.text = shop.CanRemoveCardThisVisit ? $"{shop.CardRemovePrice}G" : "완료";
     }
 
     // ── 유틸 ────────────────────────────────────────────

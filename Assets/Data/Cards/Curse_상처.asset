@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc3f756a288279b48bb77d1c38ac9be2, type: 3}
+  m_Name: "Curse_\uC0C1\uCC98"
+  m_EditorClassIdentifier: Assembly-CSharp::CardData
+  cardName: "\uC0C1\uCC98"
+  description: "\uC0AC\uC6A9\uD560 \uC218 \uC5C6\uB2E4. \uB2E4\uC74C \uC804\uD22C\uAC00
+    \uB05D\uB098\uBA74 \uC0AC\uB77C\uC9C4\uB2E4."
+  artwork: {fileID: 0}
+  cardType: 2
+  rangeType: 2
+  classTag: 3
+  energyCost: 0
+  useableSlots: 0
+  targetSlots: 0
+  targetAlly: 0
+  isAoe: 0
+  autoTarget: 0
+  targetMode: 0
+  targetSelf: 1
+  effects: []
+  exhaust: 0
+  unplayable: 1
+  turnEndInHandEffects: []
+  scope: 10
+  upgrade1:
+    effects: []
+    costDelta: 0
+    description: 
+  upgrade2:
+    effects: []
+    costDelta: 0
+    description: 

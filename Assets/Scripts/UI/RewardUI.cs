@@ -62,7 +62,7 @@ public class RewardUI : MonoBehaviour
         {
             bool has = reward.relic != null;
             relicText.gameObject.SetActive(has);
-            if (has) relicText.text = $"렐릭 획득  {reward.relic.relicName}";
+            if (has) relicText.text = $"렐릭 획득  {RarityTable.Colorize(reward.relic.relicName, reward.relic.rarity)}";
         }
 
         BuildCards(reward.cardChoices);

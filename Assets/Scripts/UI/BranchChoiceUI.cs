@@ -35,6 +35,8 @@ public class BranchChoiceUI : MonoBehaviour
             boardPhaseManager.OnPlayerSupplyRequested      += ShowSupplyMenu;
             boardPhaseManager.OnRerollOffered              += ShowRerollMenu;
         }
+        SubscribeRest();
+        if (GameManager.Instance != null && GameManager.Instance.IsRestPending && !DeckViewerUI.IsOpen) ShowRestMenu();
 
         // 패널이 꺼져 있는 동안 요청이 왔다면 켜지는 순간 다시 띄운다 — 안 그러면 보드가 영영 멈춘다
         if (boardPhaseManager != null)
@@ -58,6 +60,8 @@ public class BranchChoiceUI : MonoBehaviour
             boardPhaseManager.OnPlayerSupplyRequested      -= ShowSupplyMenu;
             boardPhaseManager.OnRerollOffered              -= ShowRerollMenu;
         }
+        UnsubscribeRest();
+        CloseRestMenu();
 
         Clear();
         CloseSupplyMenu();
@@ -163,7 +167,7 @@ public class BranchChoiceUI : MonoBehaviour
         var rt = supplyMenu.GetComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot     = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(420f, 330f);
+        rt.sizeDelta = new Vector2(460f, 600f);
 
         var bg = supplyMenu.AddComponent<Image>();
         bg.color = new Color(0.08f, 0.07f, 0.06f, 0.94f);
@@ -182,10 +186,63 @@ public class BranchChoiceUI : MonoBehaviour
         AddText($"{title} - 보급 1회", 22);
 
         AddButton(isSupply ? "구매 (상점 열기)" : "구매 - 보급소에서만", isSupply, SupplyChoice.Shop);
-        AddButton("HP 회복 (소)",               true,  SupplyChoice.Heal);
-        AddButton("카드 강화 - 준비 중",         false, SupplyChoice.Upgrade);
-        AddButton("카드 제거 - 준비 중",         false, SupplyChoice.RemoveCard);
-        AddButton("넘기기",                     true,  SupplyChoice.Skip);
+        AddButton("HP 회복 (소)",                    true,  SupplyChoice.Heal);
+        AddButton("강화 (카드·동료 1회)",             true,  SupplyChoice.Upgrade);
+        AddButton("카드 제거 (1장, 무료)",            CanRemoveCard(), SupplyChoice.RemoveCard);
+        AddButton("전열 정비 (다음 조우 1턴 방어막)",   true,  SupplyChoice.Fortify);
+        AddButton("기습 준비 (다음 조우 1턴 에너지 +1)", true,  SupplyChoice.Ambush);
+        AddButton("함정 설치 (다음 조우 하수인 기절)",   true,  SupplyChoice.Trap);
+        AddButton("동료 훈련 (동료 1명 강화)",         HasCompanions(), SupplyChoice.TrainCompanion);
+        AddButton("넘기기",                          true,  SupplyChoice.Skip);
+    }
+
+    private static bool CanRemoveCard()
+        => GameManager.Instance != null && GameManager.Instance.Player.DeckManager.CanRemoveCard;
+
+    private static bool HasCompanions()
+        => GameManager.Instance != null && GameManager.Instance.Companions.Count > 0;
+
+    // ── ④ 휴식 노드 — HP 회복 / 강화 ─────────────────────
+
+    [System.NonSerialized] private GameObject restMenu;
+    [System.NonSerialized] private bool       restSubscribed;
+
+    private void SubscribeRest()
+    {
+        if (restSubscribed || GameManager.Instance == null) return;
+        GameManager.Instance.OnRestRequested += ShowRestMenu;
+        restSubscribed = true;
+    }
+
+    private void UnsubscribeRest()
+    {
+        if (!restSubscribed || GameManager.Instance == null) return;
+        GameManager.Instance.OnRestRequested -= ShowRestMenu;
+        restSubscribed = false;
+    }
+
+    private void ShowRestMenu()
+    {
+        CloseRestMenu();
+        var gm = GameManager.Instance;
+        if (gm == null) return;
+
+        var parent = mapView != null ? mapView.PanelRoot : (RectTransform)transform;
+        restMenu = BuildMenuFrame(parent, "RestMenu", new Vector2(380f, 200f));
+
+        AddText(restMenu, "휴식 - 하나를 고른다", 22);
+        AddMenuButton(restMenu, $"HP 회복 (+{gm.RestHealAmount})", true, () => { CloseRestMenu(); gm.RestHeal(); });
+        AddMenuButton(restMenu, "강화 (카드·동료 1회)", true, () =>
+        {
+            CloseRestMenu();
+            gm.RestUpgrade(onCancel: ShowRestMenu);   // 취소하면 이 창으로 돌아온다
+        });
+    }
+
+    private void CloseRestMenu()
+    {
+        if (restMenu != null) Destroy(restMenu);
+        restMenu = null;
     }
 
     // ── ③ 재굴림 선택 ───────────────────────────────────

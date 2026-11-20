@@ -27,13 +27,12 @@ public class GameManager : MonoBehaviour
     [SerializeField] private CompanionEntity  companionEntityTemplate;
 
     [Header("런 시작 설정")]
-    [SerializeField] private CharacterData startingCharacter;   // 캐릭터 선택 구현 전까지 고정
+    [SerializeField] private CharacterData startingCharacter;   // 처음부터 열려 있는 캐릭터. 나머지는 메타 해금으로 늘어난다 (AvailableCharacters)
     [SerializeField] private bool          skipMainMenu;        // 디버그용 — 켜면 메뉴 없이 바로 런 시작
 
     [Header("노드 효과")]
     [Range(0f, 1f)]
     [SerializeField] private float restHealPercent = 0.3f;  // 휴식: 최대 HP 대비 회복률
-    [SerializeField] private int   curseHpLoss     = 8;      // 저주: 즉시 HP 감소
 
     [Header("일반 전투 적 구성")]
     [SerializeField] private int monsterNodeEnemyMin = 1;
@@ -43,6 +42,14 @@ public class GameManager : MonoBehaviour
 
     [Header("조우 전투")]
     [SerializeField] private int encounterTurnLimit = 2;   // 조우지점·마계의 전령 전투 턴 상한 (최종 결전은 무제한)
+
+    [Header("조우지점 준비 — 다음 보스 전투 1회 (GDD 4장, 6-A에서 조정)")]
+    [SerializeField] private int fortifyShield = 8;   // 전열 정비: 1턴 방어막
+    [SerializeField] private int ambushEnergy  = 1;   // 기습 준비: 1턴 에너지
+    [SerializeField] private int trapStunTurns = 1;   // 함정 설치: 하수인 기절 턴
+
+    [Header("특별 강화")]
+    [SerializeField] private List<CardData> curseCards = new();   // '저주 동반' 페널티용 — 저주 카드(3단계 4번)가 생기면 채운다
 
     // ── 이벤트 ──────────────────────────────────────────
 
@@ -56,6 +63,10 @@ public class GameManager : MonoBehaviour
 
     // 상점 UI를 열어 달라는 요청 (nodeIndex) — 상점 노드 착지·보급소 이용 공용
     public event Action<int> OnShopRequested;
+
+    // 휴식 노드 — UI가 "HP 회복 / 강화" 선택 창을 연다. RestHeal / RestUpgrade로 답한다
+    public event Action OnRestRequested;
+    public bool IsRestPending { get; private set; }
 
     // ── 런타임 상태 ─────────────────────────────────────
 
@@ -104,6 +115,29 @@ public class GameManager : MonoBehaviour
         StartRun(startingCharacter);
     }
 
+    // 메인 메뉴의 캐릭터 선택지 — 기본 캐릭터 + 메타 해금된 캐릭터 (3단계 7번)
+    // 기본 캐릭터를 해금 항목으로도 걸어 두는 실수가 있어도 두 번 나오지 않게 거른다
+    public List<CharacterData> AvailableCharacters
+    {
+        get
+        {
+            var list = new List<CharacterData>();
+            if (startingCharacter != null) list.Add(startingCharacter);
+
+            var meta = MetaProgressionManager.Instance;
+            if (meta == null) return list;
+            foreach (var c in meta.GetUnlockedCharacters())
+                if (c != null && !list.Contains(c)) list.Add(c);
+            return list;
+        }
+    }
+
+    // 해금된 시작 렐릭 — 런 시작 때 하나를 골라 캐릭터 고유 렐릭에 **더해서** 받는다 (GDD 16장)
+    public List<RelicData> AvailableStartingRelics
+        => MetaProgressionManager.Instance != null
+         ? MetaProgressionManager.Instance.GetUnlockedStartingRelics()
+         : new List<RelicData>();
+
     // 보상 화면의 "메인 메뉴로" 버튼이 호출.
     // 씬을 다시 로드해 런 상태(덱·보드·소환된 유닛)를 통째로 초기화한다.
     // MetaProgressionManager는 DontDestroyOnLoad라 누적 포인트는 유지된다.
@@ -118,7 +152,8 @@ public class GameManager : MonoBehaviour
 
     // ── 런 시작 ─────────────────────────────────────────
 
-    public void StartRun(CharacterData characterData)
+    // extraRelic — 메타 해금으로 고른 시작 렐릭. 없으면 null
+    public void StartRun(CharacterData characterData, RelicData extraRelic = null)
     {
         CurrentStage = 0;
 
@@ -134,6 +169,14 @@ public class GameManager : MonoBehaviour
         RelicManager.Instance?.ClearAll();
 
         playerCharacter.Initialize(characterData);
+
+        // Initialize **뒤**여야 한다 — Initialize가 스탯을 새로 깔기 때문에,
+        // 앞에서 받으면 최대 HP 같은 Passive 보정이 지워진다. ClearAll(위)보다도 뒤라 지워지지 않는다
+        if (characterData.startingRelic != null)
+            RelicManager.Instance?.AddPlayerRelic(characterData.startingRelic);
+        // 고유 렐릭과 같은 걸 골랐으면 두 번 주지 않는다 (렐릭은 한 종류당 하나)
+        if (extraRelic != null && extraRelic != characterData.startingRelic)
+            RelicManager.Instance?.AddPlayerRelic(extraRelic);
 
         // 반드시 먼저 해제한다 — EndRun을 거치지 않고 StartRun이 다시 불리면
         // 구독이 쌓여 런 종료 처리가 두 번 돌아간다
@@ -185,6 +228,9 @@ public class GameManager : MonoBehaviour
         boardPhaseManager.OnBossLanded          += HandleBossLanded;
         boardPhaseManager.OnBossAcquiresMinion  += HandleBossAcquiresMinion;
         boardPhaseManager.OnSupplyShopRequested += HandleSupplyShopRequested;
+        boardPhaseManager.OnSupplyUpgradeRequested += HandleSupplyUpgradeRequested;
+        boardPhaseManager.OnSupplyRemoveRequested  += HandleSupplyRemoveRequested;
+        boardPhaseManager.OnEncounterPrepChosen    += AddEncounterPrep;
     }
 
     private void UnsubscribeBoardEvents()
@@ -194,6 +240,9 @@ public class GameManager : MonoBehaviour
         boardPhaseManager.OnBossLanded          -= HandleBossLanded;
         boardPhaseManager.OnBossAcquiresMinion  -= HandleBossAcquiresMinion;
         boardPhaseManager.OnSupplyShopRequested -= HandleSupplyShopRequested;
+        boardPhaseManager.OnSupplyUpgradeRequested -= HandleSupplyUpgradeRequested;
+        boardPhaseManager.OnSupplyRemoveRequested  -= HandleSupplyRemoveRequested;
+        boardPhaseManager.OnEncounterPrepChosen    -= AddEncounterPrep;
     }
 
     // ── 보드 이벤트 핸들러 ───────────────────────────────
@@ -217,7 +266,15 @@ public class GameManager : MonoBehaviour
         combatManager.OnCombatEnd += HandleCombatEnd;
         // 진형에 세운 동료만 데려간다. 대기열까지 넘기면 전투에 없는 동료가
         // 턴을 받고 패턴까지 발동한다.
+        //
+        // 순서가 중요하다: 방어막·에너지 준비는 StartCombat **앞**에서 구독하고, 함정은 **뒤**에서 건다.
+        // 첫 플레이어 턴 시작 신호가 언제 나가는지는 전투 루프 코루틴이 어디서 멈추느냐에 달려 있다 —
+        // 뒤에서 구독하면 그 신호를 놓쳐 2라운드에 들어올 수 있다 (2026-11-20 코드 리뷰 지적.
+        // 지금 구조에선 한 프레임 뒤에 나가 실제로 놓치진 않았지만, 루프를 고치는 순간 조용히 깨진다).
+        // 함정은 반대로 전투가 1라운드 예고를 정한 뒤여야 그 예고를 지울 수 있다
+        SubscribePrepResources();
         combatManager.StartCombat(playerCharacter, DeployedCompanions, currentBoss, spawnedEnemies, turnLimit);
+        ApplyPrepTraps();
     }
 
     // 보급소 이용 — 그 조우지점의 상점을 연다. 닫히면 UIManager가 NotifyNodeResolved로 게이트를 연다
@@ -239,6 +296,10 @@ public class GameManager : MonoBehaviour
         if (type == NodeType.Treasure)
             boardPhaseManager.BeginResolution();
 
+        // 휴식은 "HP 회복 / 강화" 선택 창을 띄운다
+        if (type == NodeType.Rest)
+            boardPhaseManager.BeginResolution();
+
         OnPlayerNodeEvent?.Invoke(nodeIndex, type);
 
         switch (type)
@@ -249,26 +310,213 @@ public class GameManager : MonoBehaviour
                 StartNodeCombat(nodeIndex, type);
                 break;
 
-            case NodeType.Rest:     ApplyRest();     break;
-            case NodeType.Curse:    ApplyCurse();    break;
+            case NodeType.Rest:     RequestRest();   break;
             case NodeType.Treasure: OfferTreasure(); break;
         }
     }
 
     // ── 노드 즉시 효과 ───────────────────────────────────
 
-    // 휴식: HP 회복. (카드 업그레이드는 업그레이드 시스템 구현 후 선택지로 추가)
+    // ── 휴식 노드 — HP 회복 / 강화 1장 중 택 1 (슬더스 모닥불) ──
+
+    private void RequestRest()
+    {
+        IsRestPending = true;
+        if (OnRestRequested != null) { OnRestRequested.Invoke(); return; }
+
+        // UI가 없으면 회복으로 처리 — 보드가 선택을 기다리며 멈추지 않게
+        RestHeal();
+    }
+
+    public int RestHealAmount => Mathf.Max(1, Mathf.RoundToInt(playerCharacter.Stats.MaxHp * restHealPercent));
+
+    public void RestHeal()
+    {
+        if (!IsRestPending) return;
+        IsRestPending = false;
+        ApplyRest();
+        boardPhaseManager.EndResolution();
+    }
+
+    // 강화 창을 연다. 취소하면 onCancel(선택 창으로 돌아가기)
+    public void RestUpgrade(Action onCancel)
+    {
+        if (!IsRestPending) return;
+        OpenUpgradePicker("강화할 카드·동료를 고르세요", 1, special: false, includeCards: true, includeCompanions: true,
+            onDone: () => { IsRestPending = false; boardPhaseManager.EndResolution(); },
+            onCancel: onCancel);
+    }
+
+    // ── 강화 창 (휴식·조우지점·이벤트 공용) ──────────────
+
+    // levels: 1 = 일반 강화, 2 = 특별 강화(한 번에 +2, 대신 무작위 페널티 — 카드만)
+    public void OpenUpgradePicker(string title, int levels, bool special, bool includeCards, bool includeCompanions,
+                                  Action onDone, Action onCancel)
+    {
+        var canvas = UnityEngine.Object.FindFirstObjectByType<Canvas>();
+        var anyUi  = canvas != null ? canvas.transform as RectTransform : null;
+
+        var request = new DeckViewerUI.PickRequest
+        {
+            title            = title,
+            cards            = includeCards ? DeckViewerUI.Sorted(playerCharacter.DeckManager.GetAllCards()) : null,
+            companions       = includeCompanions ? new List<CompanionEntity>(companions) : null,
+            // 특별 강화(+2)는 강화 안 된 카드만 — +카드는 ++에서 막혀 한 단계만 오르는데
+            // 대가는 그대로 붙었다 (2026-11-20 코드 리뷰에서 발견)
+            canPickCard      = special ? (Func<CardData, bool>)(c => CardUpgrader.CanUpgrade(c) && c.upgradeLevel == 0)
+                                       : CardUpgrader.CanUpgrade,
+            canPickCompanion = c => c.CanUpgrade,
+            cardTooltip      = c => CardUpgrader.Preview(c, levels) + (special ? "\n\n[대가] 무작위 페널티 1개가 붙는다" : ""),
+            companionTooltip = c => c.NextUpgradePreview(),
+            onCancel         = onCancel,
+        };
+
+        request.onPickCard = card =>
+        {
+            var penalty = special ? CardUpgrader.RandomPenalty(card, curseCards.Count > 0) : CardPenalty.None;
+            var upgraded = CardUpgrader.Upgrade(card, levels, penalty);
+            playerCharacter.DeckManager.ReplaceCard(card, upgraded);
+
+            if (penalty == CardPenalty.AddCurse && curseCards.Count > 0)
+                playerCharacter.DeckManager.AddCard(curseCards[UnityEngine.Random.Range(0, curseCards.Count)]);
+
+            onDone?.Invoke();
+        };
+
+        request.onPickCompanion = c =>
+        {
+            for (int i = 0; i < levels; i++) c.Upgrade();
+            OnFormationChanged?.Invoke();   // 편성창 이름·HP 갱신
+            onDone?.Invoke();
+        };
+
+        DeckViewerUI.ShowPicker(anyUi, request);
+    }
+
+    // 조우지점 대기 메뉴의 강화 / 동료 훈련
+    private void HandleSupplyUpgradeRequested(bool companionsOnly)
+    {
+        OpenUpgradePicker(companionsOnly ? "훈련할 동료를 고르세요" : "강화할 카드·동료를 고르세요",
+            1, special: false, includeCards: !companionsOnly, includeCompanions: true,
+            onDone:   () => boardPhaseManager.NotifySupplyPickResult(true),
+            onCancel: () => boardPhaseManager.NotifySupplyPickResult(false));
+    }
+
+    // ── 카드 제거 창 (대기 메뉴·상점·이벤트 공용) ──────────
+    //
+    // 예전엔 상점이 이벤트 창의 제거 UI를 빌려 써서 **골드를 받지 않고** 이벤트 완료 신호까지 보냈다.
+    // 세 곳 모두 이 창 하나로 통일한다. goldCost > 0이면 ShopManager.TryRemoveCard로 골드를 받는다.
+    public void OpenRemovePicker(string title, int goldCost, Action onDone, Action onCancel)
+    {
+        var deck   = playerCharacter.DeckManager;
+        var canvas = UnityEngine.Object.FindFirstObjectByType<Canvas>();
+
+        var request = new DeckViewerUI.PickRequest
+        {
+            title       = deck.CanRemoveCard ? title : $"{title} - 덱이 {deck.DrawPerTurn}장 이하라 더 뺄 수 없다",
+            cards       = DeckViewerUI.Sorted(deck.GetAllCards()),
+            // 저주는 여기서 뺄 수 없다 (2026-09-27 결정) — 저주만 없애는 이벤트를 따로 둔다(4단계).
+            // 일반 제거로 빠지면 저주가 "제거 1회로 지우는 것"이 되어 무게가 사라진다
+            canPickCard = c => !c.IsCurse && deck.CanRemoveCard,
+            cardTooltip = c => c.IsCurse ? "저주는 여기서 뺄 수 없다"
+                                         : "이 카드를 덱에서 영구히 뺀다" + (goldCost > 0 ? $" ({goldCost}골드)" : ""),
+            onCancel    = onCancel,
+        };
+
+        request.onPickCard = card =>
+        {
+            bool ok = goldCost > 0 ? ShopManager.Instance != null && ShopManager.Instance.TryRemoveCard(card)
+                                   : deck.RemoveCard(card);
+            if (ok) onDone?.Invoke();
+            else    onCancel?.Invoke();   // 골드 부족 등 — 아무것도 빠지지 않았다
+        };
+
+        DeckViewerUI.ShowPicker(canvas != null ? canvas.transform as RectTransform : null, request);
+    }
+
+    private void HandleSupplyRemoveRequested()
+    {
+        OpenRemovePicker("덱에서 뺄 카드를 고르세요 (무료)", 0,
+            onDone:   () => boardPhaseManager.NotifySupplyPickResult(true),
+            onCancel: () => boardPhaseManager.NotifySupplyPickResult(false));
+    }
+
+    // ── 조우지점 준비 — 다음 보스 전투 1회에 적용 (여러 번 고르면 쌓인다) ──
+
+    private int prepShield, prepEnergy, prepTraps;
+
+    private void AddEncounterPrep(SupplyChoice kind)
+    {
+        switch (kind)
+        {
+            case SupplyChoice.Fortify: prepShield += fortifyShield; break;
+            case SupplyChoice.Ambush:  prepEnergy += ambushEnergy;  break;
+            case SupplyChoice.Trap:    prepTraps  += 1;             break;
+        }
+    }
+
+    public bool HasEncounterPrep => prepShield > 0 || prepEnergy > 0 || prepTraps > 0;
+
+    // 함정 — 보스 전투 시작 직후 (StartCombat 뒤)
+    private void ApplyPrepTraps()
+    {
+        if (prepTraps <= 0) return;
+
+        // 함정: 앞쪽 하수인부터 기절시키고 **이번 라운드 예고를 지운다.**
+        // 전투가 시작되자마자 1라운드 예고가 이미 정해져 있어서, 기절만 걸면 적 턴 시작에 1턴짜리 기절이
+        // 먼저 풀리고 그대로 행동한다 (PLAN 검토 대기 — 기절 타이밍). 예고가 없으면 그 턴은 쉰다.
+        // 다음 라운드부터는 기절이 예고 판정에서 걸러 준다.
+        var targets = spawnedEnemies.FindAll(m => m != null && m.IsActive);
+        targets.Sort((a, b) => a.CurrentSlot.CompareTo(b.CurrentSlot));
+        for (int i = 0; i < prepTraps && i < targets.Count; i++)
+        {
+            targets[i].ApplyStatus(StatusEffect.Stun, 1, trapStunTurns);
+            targets[i].ClearIntent();
+        }
+        combatManager.RefreshIntentPreviews();
+        prepTraps = 0;
+    }
+
+    // 방어막·에너지 — 첫 플레이어 턴이 시작된 뒤에 준다 (StartCombat 앞에서 구독).
+    // 턴 시작 처리가 방어막을 비우고 에너지를 채우므로 그보다 먼저 주면 사라진다.
+    // 1회용이다: 받았거나 전투가 끝나면 구독을 푼다 — 안 풀면 다음 전투 첫 턴에 공짜로 들어온다
+    [NonSerialized] private Action<CombatEntity> prepTurnHandler;
+    [NonSerialized] private Action<bool>         prepEndHandler;
+
+    private void SubscribePrepResources()
+    {
+        UnsubscribePrepResources();   // 이전 전투에서 남은 게 있으면 버린다
+
+        int shield = prepShield, energy = prepEnergy;
+        prepShield = prepEnergy = 0;
+        if (shield <= 0 && energy <= 0) return;
+
+        prepTurnHandler = entity =>
+        {
+            if (!(entity is PlayerCharacter)) return;
+            UnsubscribePrepResources();
+            if (shield > 0) playerCharacter.Stats.AddShield(shield);
+            if (energy > 0) playerCharacter.DeckManager.GainEnergy(energy);
+        };
+        prepEndHandler = _ => UnsubscribePrepResources();
+
+        combatManager.OnEntityTurnBegin += prepTurnHandler;
+        combatManager.OnCombatEnd       += prepEndHandler;
+    }
+
+    private void UnsubscribePrepResources()
+    {
+        if (prepTurnHandler != null) combatManager.OnEntityTurnBegin -= prepTurnHandler;
+        if (prepEndHandler  != null) combatManager.OnCombatEnd       -= prepEndHandler;
+        prepTurnHandler = null;
+        prepEndHandler  = null;
+    }
+
+    // 휴식: HP 회복
     private void ApplyRest()
     {
         int amount = Mathf.Max(1, Mathf.RoundToInt(playerCharacter.Stats.MaxHp * restHealPercent));
         playerCharacter.Heal(amount);
-    }
-
-    // 저주: 즉시 HP 상실. 전투 밖의 일이므로 방어막·취약·피격 트리거를 타지 않는다.
-    // (저주 카드 추가는 저주 카드 에셋 마련 후 확장)
-    private void ApplyCurse()
-    {
-        playerCharacter.LoseHp(curseHpLoss);
     }
 
     // 보물: 전투 없이 카드 선택 + 렐릭. 보상 화면이 닫히면 보드가 이어진다.

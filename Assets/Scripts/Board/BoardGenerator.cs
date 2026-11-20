@@ -176,7 +176,7 @@ public class BoardGenerator : MonoBehaviour
             (NodeType.Shop,     data.shopRatio),
             (NodeType.Rest,     data.restRatio),
             (NodeType.Treasure, data.treasureRatio),
-            (NodeType.Curse,    data.curseRatio),
+            // 저주 노드는 폐기 (2026-09-27) — 밟으면 손해만 보는 칸이라 이벤트로 통합했다
         };
 
         var pool = new List<NodeType>(count);

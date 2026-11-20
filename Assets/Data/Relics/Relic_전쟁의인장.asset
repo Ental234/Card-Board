@@ -15,6 +15,7 @@ MonoBehaviour:
   relicName: "\uC804\uC7C1\uC758 \uC778\uC7A5"
   description: "\uAE30\uBCF8 \uACF5\uACA9\uB825\uC774 2 \uC99D\uAC00\uD55C\uB2E4."
   icon: {fileID: 0}
+  rarity: 10
   effects:
   - trigger: 0
     effectType: 5

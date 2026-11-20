@@ -8,6 +8,9 @@ using UnityEngine.UI;
 // 덱 / 뽑을 더미 / 버린 더미 / 소모 더미를 전부 같은 창으로 보여준다. 카드 모양은 손패와 같은 프리팹을 쓴다.
 // 여러 묶음(예: 전투 덱 + 보드 카드)을 제목을 달아 한 창에 나열할 수 있다.
 //
+// **고르기 모드**(ShowPicker) — 강화·카드 제거처럼 "덱에서 한 장(한 명) 고르기"도 같은 창으로 한다.
+// 고를 수 없는 것은 흐리게, 고르면 창이 닫히고 콜백이 불린다. 닫기·빈 곳·Esc는 취소 콜백.
+//
 // 씬·프리팹을 건드리지 않고 처음 열 때 런타임에 만든다 (프리팹 오버라이드 함정 회피).
 // 루트 캔버스 위 정렬 캔버스(4000)로 올린다 — 툴팁(5000)보다는 아래라 카드 위 툴팁이 가려지지 않는다.
 public class DeckViewerUI : MonoBehaviour
@@ -20,6 +23,23 @@ public class DeckViewerUI : MonoBehaviour
     }
 
     private static DeckViewerUI instance;
+
+    // 고르기 모드 요청 — null이면 보기 전용
+    public class PickRequest
+    {
+        public string                          title;
+        public IReadOnlyList<CardData>         cards;           // 전투 카드 (null이면 카드 묶음 없음)
+        public IReadOnlyList<CompanionEntity>  companions;      // 동료 (null이면 동료 묶음 없음)
+        public System.Func<CardData, bool>        canPickCard      = _ => true;
+        public System.Func<CompanionEntity, bool> canPickCompanion = _ => true;
+        public System.Func<CardData, string>        cardTooltip;       // 호버 시 본문 (예: 강화 미리보기)
+        public System.Func<CompanionEntity, string> companionTooltip;
+        public System.Action<CardData>          onPickCard;
+        public System.Action<CompanionEntity>   onPickCompanion;
+        public System.Action                    onCancel;
+    }
+
+    private PickRequest pick;   // 지금 열린 고르기 요청
 
     private const float CellScale = 0.85f;   // 손패보다 조금 작게 — 한 화면에 두 줄 이상 보이게
 
@@ -42,16 +62,48 @@ public class DeckViewerUI : MonoBehaviour
         var view = Ensure(anyUi, prefab);
         if (view == null) return;
 
+        view.pick = null;
         view.Fill(title, sections);
+        view.gameObject.SetActive(true);
+        view.transform.SetAsLastSibling();
+    }
+
+    // 고르기 모드로 연다
+    public static void ShowPicker(RectTransform anyUi, PickRequest request)
+    {
+        var hand   = Object.FindFirstObjectByType<HandUI>(FindObjectsInactive.Include);
+        var prefab = hand != null ? hand.CardPrefab : null;
+        if (anyUi == null || prefab == null || request == null) { request?.onCancel?.Invoke(); return; }
+
+        var view = Ensure(anyUi, prefab);
+        if (view == null) { request.onCancel?.Invoke(); return; }
+
+        view.pick = request;
+        var sections = new List<Section>();
+        if (request.cards != null) sections.Add(new Section("카드", request.cards));
+        view.Fill(request.title, sections.ToArray());
+        if (request.companions != null) view.AddCompanionSection(request.companions);
         view.gameObject.SetActive(true);
         view.transform.SetAsLastSibling();
     }
 
     public static bool IsOpen => instance != null && instance.gameObject.activeSelf;
 
+    // 사용자가 닫았다(닫기·빈 곳·Esc) — 고르기 모드였다면 취소를 알린다
     public static void Close()
     {
-        if (instance != null) instance.gameObject.SetActive(false);
+        if (instance == null) return;
+        var cancel = instance.pick?.onCancel;
+        instance.pick = null;
+        instance.gameObject.SetActive(false);
+        cancel?.Invoke();
+    }
+
+    // 골랐다 — 취소 콜백 없이 닫는다
+    private void Finish()
+    {
+        pick = null;
+        gameObject.SetActive(false);
     }
 
     // 뽑을 더미는 순서를 들키면 안 된다 — 비용·이름 순으로 정렬해서 보여준다
@@ -204,7 +256,7 @@ public class DeckViewerUI : MonoBehaviour
 
         int total = 0;
         foreach (var s in sections) total += s.cards?.Count ?? 0;
-        titleText.text = $"{title} ({total}장)";
+        titleText.text = pick != null ? title : $"{title} ({total}장)";
 
         foreach (var s in sections)
         {
@@ -239,7 +291,26 @@ public class DeckViewerUI : MonoBehaviour
                 // 그리드 칸 안에 카드 프리팹을 축소해 넣는다 — 프리팹 자체 크기를 바꾸면 내부 배치가 흐트러진다
                 var cell = NewRect("Cell", grid);
                 var ui   = Instantiate(cardPrefab, cell);
-                ui.Setup(card, usable: true);   // 보기 전용 — 클릭 구독이 없어 눌러도 아무 일 없다
+
+                if (pick == null)
+                {
+                    ui.Setup(card, usable: true);   // 보기 전용 — 클릭 구독이 없어 눌러도 아무 일 없다
+                    // 호버하면 다음 강화 내용을 보여준다 (GDD 9장 — 덱 목록에서도 미리보기)
+                    var captured = card;
+                    TooltipTrigger.Attach(ui.gameObject, () => ("다음 강화", CardUpgrader.Preview(captured)));
+                }
+                else
+                {
+                    var captured = card;
+                    bool can = pick.canPickCard == null || pick.canPickCard(card);
+                    ui.Setup(card, usable: can);    // 고를 수 없으면 흐리게 (CardUI가 반투명 처리)
+                    if (can) ui.OnClicked += _ => { var cb = pick?.onPickCard; Finish(); cb?.Invoke(captured); };
+                    if (pick.cardTooltip != null)
+                    {
+                        var tip = pick.cardTooltip;
+                        TooltipTrigger.Attach(ui.gameObject, () => (RarityTable.Colorize(captured.cardName, captured.rarity), tip(captured)));
+                    }
+                }
 
                 var crt = ui.GetComponent<RectTransform>();
                 crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -252,6 +323,62 @@ public class DeckViewerUI : MonoBehaviour
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
         scroll.verticalNormalizedPosition = 1f;   // 맨 위부터
+    }
+
+    // 동료 묶음 — 카드 프리팹이 아니라 이름·HP 타일로 그린다
+    private void AddCompanionSection(IReadOnlyList<CompanionEntity> companions)
+    {
+        var header = NewRect("Header", content);
+        header.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+        AddText(header.gameObject, 16, new Color(0.75f, 0.72f, 0.62f), TextAlignmentOptions.MidlineLeft)
+            .text = $"동료 ({companions.Count}명)";
+
+        if (companions.Count == 0)
+        {
+            var empty = NewRect("Empty", content);
+            empty.gameObject.AddComponent<LayoutElement>().preferredHeight = 40f;
+            AddText(empty.gameObject, 16, new Color(0.6f, 0.58f, 0.52f), TextAlignmentOptions.MidlineLeft).text = "동료가 없다";
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+            return;
+        }
+
+        var grid = NewRect("CompanionGrid", content);
+        var g = grid.gameObject.AddComponent<GridLayoutGroup>();
+        g.cellSize       = new Vector2(200f, 72f);
+        g.spacing        = new Vector2(14f, 14f);
+        g.constraint     = GridLayoutGroup.Constraint.Flexible;
+        g.childAlignment = TextAnchor.UpperLeft;
+
+        foreach (var c in companions)
+        {
+            if (c == null) continue;
+            var captured = c;
+            bool can = pick == null || pick.canPickCompanion == null || pick.canPickCompanion(c);
+
+            var tile = NewRect("Companion", grid);
+            var img  = tile.gameObject.AddComponent<Image>();
+            img.color = can ? new Color(0.20f, 0.30f, 0.22f, 0.95f) : new Color(0.15f, 0.15f, 0.15f, 0.6f);
+
+            var label = NewRect("Label", tile);
+            label.anchorMin = Vector2.zero; label.anchorMax = Vector2.one;
+            label.offsetMin = new Vector2(8f, 4f); label.offsetMax = new Vector2(-8f, -4f);
+            AddText(label.gameObject, 16, can ? Color.white : new Color(1f, 1f, 1f, 0.45f), TextAlignmentOptions.Center)
+                .text = $"{c.EntityName}\nHP {c.Stats.CurrentHp}/{c.Stats.MaxHp}";
+
+            if (pick != null && can)
+            {
+                var btn = tile.gameObject.AddComponent<Button>();
+                btn.targetGraphic = img;
+                btn.onClick.AddListener(() => { var cb = pick?.onPickCompanion; Finish(); cb?.Invoke(captured); });
+            }
+            if (pick?.companionTooltip != null)
+            {
+                var tip = pick.companionTooltip;
+                TooltipTrigger.Attach(tile.gameObject, () => (captured.EntityName, tip(captured)));
+            }
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
     private void Update()

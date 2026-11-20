@@ -5,6 +5,9 @@ using UnityEngine;
 // STS식 메타 진행 시스템
 // 런 종료 시 메타 포인트 적립 → 카드 풀·캐릭터·시작 렐릭 해금
 // PlayerPrefs로 영구 저장
+//
+// 이 클래스는 "무엇이 잠겨 있는가"만 답한다. 잠긴 것을 풀에서 빼는 건 각 풀의 주인 몫이다
+// (카드 = RewardManager·ShopManager, 캐릭터·시작 렐릭 = GameManager.AvailableCharacters / MainMenuUI)
 public class MetaProgressionManager : MonoBehaviour
 {
     public static MetaProgressionManager Instance { get; private set; }
@@ -100,9 +103,31 @@ public class MetaProgressionManager : MonoBehaviour
         PlayerPrefs.Save();
     }
 
+    // ── 잠금 판정 (3단계 7번, 2026-11-20) ────────────────
+    //
+    // 해금 카드는 **보상·상점 풀에 그대로 넣어 두고, 잠겨 있는 동안 걸러낸다.**
+    // 반대로 "풀에는 안 넣고 해금되면 더한다"로 하면, 누가 실수로 그 카드를 풀에 넣는 순간
+    // 해금 전부터 나온다 — 그리고 아무도 알아채지 못한다. 거르는 방식은 실수해도 안 나오는 쪽으로 틀린다.
+    //
+    // 해금 항목이 가리키지 않는 것은 잠기지 않는다 (= 기존 에셋은 전부 처음부터 열려 있다)
+    public bool IsLocked(UnityEngine.Object content)
+    {
+        if (content == null) return false;
+        foreach (var unlock in allUnlocks)
+        {
+            if (unlock == null || unlock.Content != content) continue;
+            if (!IsUnlocked(unlock)) return true;
+        }
+        return false;
+    }
+
+    // 매니저가 없는 씬(테스트 등)에서는 아무것도 잠그지 않는다 — 풀이 통째로 비면 보상이 사라진다
+    public static bool IsAvailable(UnityEngine.Object content)
+        => Instance == null || !Instance.IsLocked(content);
+
     // ── 해금 목록 조회 ───────────────────────────────────
 
-    // 현재 해금된 카드 목록 (카드 보상 풀 필터링에 사용)
+    // 현재 해금된 카드 목록 (해금 화면 등 표시용 — 풀 필터는 IsLocked를 쓴다)
     public List<CardData> GetUnlockedCards()
     {
         var result = new List<CardData>();
@@ -174,4 +199,14 @@ public class UnlockData : ScriptableObject
     public CardData      card;
     public CharacterData character;
     public RelicData     relic;
+
+    // type에 맞는 내용물. 다른 칸에 남은 값은 무시한다 —
+    // 타입을 Card에서 StartingRelic으로 바꾸고 card 칸을 안 비웠다고 그 카드가 잠기면 안 된다
+    public UnityEngine.Object Content => type switch
+    {
+        UnlockType.Card          => card,
+        UnlockType.Character     => character,
+        UnlockType.StartingRelic => relic,
+        _                        => null,
+    };
 }

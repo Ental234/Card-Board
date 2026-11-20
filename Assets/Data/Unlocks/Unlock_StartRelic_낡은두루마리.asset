@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: "Unlock_StartRelic_\uB0A1\uC740\uB450\uB8E8\uB9C8\uB9AC"
+  m_EditorClassIdentifier: Assembly-CSharp::UnlockData
+  unlockId: start_relic_old_scroll
+  displayName: "\uC2DC\uC791 \uB810\uB9AD: \uB0A1\uC740 \uB450\uB8E8\uB9C8\uB9AC"
+  description: "\uB7F0\uC744 \uC2DC\uC791\uD560 \uB54C \uB0A1\uC740 \uB450\uB8E8\uB9C8\uB9AC\uB97C
+    \uACE0\uB97C \uC218 \uC788\uB2E4."
+  requiredPoints: 100
+  type: 2
+  card: {fileID: 0}
+  character: {fileID: 0}
+  relic: {fileID: 11400000, guid: 95378f14281caa64e8abf9e6dc735ba6, type: 2}

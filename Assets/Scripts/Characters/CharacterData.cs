@@ -24,6 +24,9 @@ public class CharacterData : ScriptableObject
     public List<CardData> startingCombatCards = new();
     public List<CardData> startingBoardCards  = new();
 
-    [Header("시작 렐릭 (메타 해금 후 선택 가능)")]
+    // 캐릭터 고유 렐릭 — 런 시작 때 무조건 받는다 (슬더스의 캐릭터별 시작 렐릭).
+    // 상점·보상 풀에 넣지 말 것. 두 개를 갖게 된다.
+    // 메타 해금으로 여는 "추가 시작 렐릭 선택"은 이것과 별개다 (3단계 7번)
+    [Header("시작 렐릭")]
     public RelicData startingRelic;  // null = 없음
 }

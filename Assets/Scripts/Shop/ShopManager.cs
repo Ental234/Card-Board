@@ -76,6 +76,10 @@ public class ShopManager : MonoBehaviour
     private bool playerBoughtRelicThisVisit;
     public  bool CanBuyRelicThisVisit => !playerBoughtRelicThisVisit;
 
+    // 카드 제거도 방문당 1회 (슬더스 관례)
+    private bool removedCardThisVisit;
+    public  bool CanRemoveCardThisVisit => !removedCardThisVisit;
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -89,6 +93,7 @@ public class ShopManager : MonoBehaviour
     {
         current = GetOrCreateStock(nodeIndex, playerClassTag);
         playerBoughtRelicThisVisit = false;
+        removedCardThisVisit       = false;
         OnShopRefreshed?.Invoke();
     }
 
@@ -126,12 +131,17 @@ public class ShopManager : MonoBehaviour
 
         stock = new NodeStock();
 
-        // 카드: 플레이어 직업 + Universal 필터
+        // 카드: 플레이어 직업 + Universal 필터, 메타 해금 전인 카드 제외
         var filteredCards = allCardPool.FindAll(c =>
-            c.classTag == playerClass || c.classTag == ClassTag.Universal);
+            (c.classTag == playerClass || c.classTag == ClassTag.Universal)
+            && MetaProgressionManager.IsAvailable(c));
 
-        FillSlots(stock.Cards,      filteredCards,    cardSlots,      cardBasePrice);
-        FillSlots(stock.Relics,     allRelicPool,     relicSlots,     relicBasePrice);
+        // 카드·렐릭은 등급 가중 추첨 + 등급별 가격 (3단계 6번).
+        // 물약은 CardData라 rarity 필드가 있지만, 물약 등급은 아직 정하지 않아 기본가 균등 추첨을 유지한다
+        FillRaritySlots(stock.Cards,  filteredCards, cardSlots,  c => c.rarity, RarityTable.ShopCards,
+                        c => RarityTable.CardPrice(cardBasePrice, c.rarity));
+        FillRaritySlots(stock.Relics, allRelicPool,  relicSlots, r => r.rarity, RarityTable.Relics,
+                        r => RarityTable.RelicPrice(relicBasePrice, r.rarity));
         FillSlots(stock.Potions,    allPotionPool,    potionSlots,    potionBasePrice);
         FillSlots(stock.Companions, allCompanionPool, companionSlots, companionBasePrice);
         FillSlots(stock.BossItems,  allBossItemPool,  bossItemSlots,  bossItemBasePrice);
@@ -157,6 +167,21 @@ public class ShopManager : MonoBehaviour
 
         for (int i = 0; i < Mathf.Min(slots, shuffled.Count); i++)
             target.Add(new ShopItem<T>(shuffled[i], basePrice));
+    }
+
+    // 가격은 재고를 뽑을 때 한 번 정해 ShopItem.price에 박는다 — 화면 가격과 차감액이 같은 값을 읽는다
+    private static void FillRaritySlots<T>(List<ShopItem<T>> target, List<T> pool, int slots,
+                                           Func<T, Rarity> rarityOf, RarityTable.Weights weights,
+                                           Func<T, int> priceOf)
+        where T : UnityEngine.Object
+    {
+        var remaining = pool.FindAll(x => x != null);
+        for (int i = 0; i < slots; i++)
+        {
+            var picked = RarityTable.TakeWeighted(remaining, rarityOf, weights);
+            if (picked == null) break;
+            target.Add(new ShopItem<T>(picked, priceOf(picked)));
+        }
     }
 
     // ── 구매 — 플레이어 ──────────────────────────────────
@@ -236,8 +261,14 @@ public class ShopManager : MonoBehaviour
 
     public bool TryRemoveCard(CardData card)
     {
+        if (removedCardThisVisit) return false;
+        if (card == null || card.IsCurse) return false;   // 저주는 일반 제거 대상이 아니다 (창에서도 막지만 여기서 다시 확인)
+        var deck = GameManager.Instance.Player.DeckManager;
+        if (!deck.CanRemoveCard) return false;
         if (!GameManager.Instance.SpendPlayerGold(cardRemovePrice)) return false;
-        GameManager.Instance.Player.DeckManager.RemoveCard(card);
+
+        deck.RemoveCard(card);
+        removedCardThisVisit = true;
         return true;
     }
 

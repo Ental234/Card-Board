@@ -86,9 +86,9 @@ public class EventManager : MonoBehaviour
                 break;
 
             case EventEffectType.RemoveCard:
-                var allCards = player.DeckManager.GetAllCards();
-                OnRemoveCardRequested?.Invoke(allCards);
-                return true;  // UI가 RemoveSelectedCard() 호출 후 CompleteEvent() 호출
+                // 공용 카드 제거 창 (무료). 고르거나 취소하면 이벤트를 끝낸다
+                gm.OpenRemovePicker("덱에서 뺄 카드를 고르세요", 0, onDone: CompleteEvent, onCancel: CompleteEvent);
+                return true;
 
             case EventEffectType.GainRelic:
                 if (effect.relic != null)
@@ -111,6 +111,16 @@ public class EventManager : MonoBehaviour
 
             case EventEffectType.Nothing:
                 break;
+
+            // 강화 이벤트 (GDD 9장) — 고르는 창을 띄우고, 고르거나 취소하면 이벤트를 끝낸다
+            case EventEffectType.UpgradeCard:
+                bool special = effect.value >= 2;
+                gm.OpenUpgradePicker(
+                    special ? "특별 강화 - 카드를 고르세요 (+2, 대가 1개)" : "강화할 카드·동료를 고르세요",
+                    special ? 2 : 1, special,
+                    includeCards: true, includeCompanions: !special,   // 페널티는 카드에만 붙는다
+                    onDone: CompleteEvent, onCancel: CompleteEvent);
+                return true;   // 창이 닫힐 때까지 이벤트를 끝내지 않는다
         }
 
         return false;

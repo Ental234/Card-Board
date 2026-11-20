@@ -87,7 +87,7 @@ public class RewardManager : MonoBehaviour
             _                   => UnityEngine.Random.Range(monsterGoldMin, monsterGoldMax + 1),
         };
 
-        r.cardChoices = PickCards(playerClass, cardChoiceCount);
+        r.cardChoices = PickCards(playerClass, cardChoiceCount, RarityTable.CardRewardFor(kind));
 
         if (kind != RewardKind.Monster)
             r.relic = PickRelic();
@@ -95,23 +95,25 @@ public class RewardManager : MonoBehaviour
         return r;
     }
 
-    // 플레이어 직업 + 범용 카드만 후보로. 중복 없이 뽑는다.
-    private List<CardData> PickCards(ClassTag playerClass, int count)
+    // 플레이어 직업 + 범용 카드만 후보로. 등급 가중 추첨, 중복 없이 뽑는다.
+    private List<CardData> PickCards(ClassTag playerClass, int count, RarityTable.Weights weights)
     {
         var pool = new List<CardData>();
         foreach (var c in rewardCardPool)
         {
             if (c == null) continue;
-            if (c.classTag == playerClass || c.classTag == ClassTag.Universal)
-                pool.Add(c);
+            if (c.classTag != playerClass && c.classTag != ClassTag.Universal) continue;
+            if (!MetaProgressionManager.IsAvailable(c)) continue;   // 메타 해금 전인 카드
+            pool.Add(c);
         }
 
         var picks = new List<CardData>();
-        for (int i = 0; i < count && pool.Count > 0; i++)
+        for (int i = 0; i < count; i++)
         {
-            int idx = UnityEngine.Random.Range(0, pool.Count);
-            picks.Add(pool[idx]);
-            pool.RemoveAt(idx);   // 같은 보상 안에서 중복 방지
+            // TakeWeighted가 뽑은 카드를 pool에서 빼므로 같은 보상 안에서 중복되지 않는다
+            var card = RarityTable.TakeWeighted(pool, c => c.rarity, weights);
+            if (card == null) break;
+            picks.Add(card);
         }
         return picks;
     }
@@ -128,8 +130,7 @@ public class RewardManager : MonoBehaviour
             pool.Add(r);
         }
 
-        if (pool.Count == 0) return null;
-        return pool[UnityEngine.Random.Range(0, pool.Count)];
+        return RarityTable.TakeWeighted(pool, r => r.rarity, RarityTable.Relics);
     }
 
     // ── 선택 처리 (UI가 호출) ───────────────────────────

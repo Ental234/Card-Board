@@ -19,6 +19,7 @@ MonoBehaviour:
   cardType: 1
   rangeType: 2
   classTag: 2
+  rarity: 20
   energyCost: 2
   useableSlots: 0
   targetSlots: 0
@@ -32,3 +33,15 @@ MonoBehaviour:
     value: -1
     status: 0
     duration: 0
+  exhaust: 0
+  unplayable: 0
+  turnEndInHandEffects: []
+  scope: 0
+  upgrade1:
+    effects: []
+    costDelta: 0
+    description: 
+  upgrade2:
+    effects: []
+    costDelta: 0
+    description: 

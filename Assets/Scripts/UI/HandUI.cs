@@ -54,7 +54,7 @@ public class HandUI : MonoBehaviour
     }
 
     private bool IsUsable(CardData data)
-        => data.energyCost <= currentEnergy && (ExtraUsableCheck?.Invoke(data) ?? true);
+        => !data.unplayable && data.energyCost <= currentEnergy && (ExtraUsableCheck?.Invoke(data) ?? true);
 
     // ── 카드 생성 & 팬 배치 ──────────────────────────────
 
